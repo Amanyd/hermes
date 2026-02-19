@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/encryptor"
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,11 +16,12 @@ import (
 var ErrSecretNotFound = errors.New("secret not found")
 
 type SecretStore struct {
-	db *pgxpool.Pool
+	db        *pgxpool.Pool
+	encryptor *encryptor.Encryptor
 }
 
-func NewSecretStore(db *pgxpool.Pool) *SecretStore {
-	return &SecretStore{db: db}
+func NewSecretStore(db *pgxpool.Pool, enc *encryptor.Encryptor) *SecretStore {
+	return &SecretStore{db: db, encryptor: enc}
 }
 
 func (s *SecretStore) Create(ctx context.Context, req models.CreateSecretRequest) (*models.Secret, error) {
@@ -29,14 +31,19 @@ func (s *SecretStore) Create(ctx context.Context, req models.CreateSecretRequest
 	if strings.TrimSpace(req.Value) == "" {
 		return nil, fmt.Errorf("secret value is required")
 	}
-
+	encrypted, err := s.encryptor.Encrypt(req.Value)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt secret: %w", err)
+	}
 	id := uuid.NewString()
 	now := time.Now()
+
 	query := `INSERT INTO secrets (id, user_id, name, value, created_at, updated_at)
-	VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, user_id, name, created_at, updated_at`
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, user_id, name, created_at, updated_at`
 
 	var secret models.Secret
-	err := s.db.QueryRow(ctx, query, id, req.UserID, req.Name, req.Value, now, now).Scan(
+	err = s.db.QueryRow(ctx, query, id, req.UserID, req.Name, encrypted, now, now).Scan(
 		&secret.ID,
 		&secret.UserID,
 		&secret.Name,

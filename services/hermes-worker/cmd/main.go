@@ -8,11 +8,14 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/encryptor"
 	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/logger"
 	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/config"
 	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/engine"
 	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/integrations/debug"
 	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/integrations/discord"
+	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/integrations/email"
+	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/integrations/httpreq"
 	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/integrations/slack"
 	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/queue"
 	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/store"
@@ -32,7 +35,13 @@ func main() {
 		slog.String("environment", cfg.Environment),
 	)
 
-	db, err := store.NewStore(cfg.DbURL)
+	enc, err := encryptor.NewEncryptor([]byte(cfg.EncryptionKey))
+	if err != nil {
+		appLogger.Error("encryption init failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	db, err := store.NewStore(cfg.DbURL, enc)
 	if err != nil {
 		appLogger.Error("database initialization failed", slog.String("error", err.Error()))
 		os.Exit(1)
@@ -45,6 +54,8 @@ func main() {
 	reg.Register("debug_log", debug.New())
 	reg.Register("discord_send", discord.New())
 	reg.Register("slack_send", slack.New())
+	reg.Register("http_request", httpreq.New())
+	reg.Register("email_send", email.New())
 	appLogger.Info("integrations loaded",
 		slog.Int("count", 3),
 		slog.Any("types", []string{"debug_log", "discord_send", "slack_send"}),

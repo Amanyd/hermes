@@ -1,6 +1,9 @@
 package engine
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 type Registry struct {
 	executors map[string]ActionExecutor
@@ -22,4 +25,17 @@ func (r *Registry) Get(name string) (ActionExecutor, error) {
 		return nil, fmt.Errorf("Unknown action type: %s", name)
 	}
 	return exec, nil
+}
+
+func (r *Registry) Count() int {
+	return len(r.executors)
+}
+
+func (r *Registry) Types() []string {
+	types := make([]string, 0, len(r.executors))
+	for k := range r.executors {
+		types = append(types, k)
+	}
+	sort.Strings(types)
+	return types
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/encryptor"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -17,7 +18,8 @@ type RelayAction struct {
 }
 
 type Store struct {
-	db *pgxpool.Pool
+	db        *pgxpool.Pool
+	encryptor *encryptor.Encryptor
 }
 
 var (
@@ -26,12 +28,12 @@ var (
 	ErrSecretNotFound = errors.New("secret not found")
 )
 
-func NewStore(dbURL string) (*Store, error) {
+func NewStore(dbURL string, enc *encryptor.Encryptor) (*Store, error) {
 	pool, err := pgxpool.New(context.Background(), dbURL)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to connect to db: %w", err)
 	}
-	return &Store{db: pool}, nil
+	return &Store{db: pool, encryptor: enc}, nil
 }
 
 func (s *Store) GetRelayActions(ctx context.Context, relayID string) ([]RelayAction, error) {
@@ -114,16 +116,17 @@ func (s *Store) LogExecution(ctx context.Context, relayID string, eventID string
 }
 
 func (s *Store) ResolveSecret(ctx context.Context, userID, secretName string) (string, error) {
-	var value string
+	var encrypted string
 	err := s.db.QueryRow(ctx,
 		`SELECT value FROM secrets WHERE user_id = $1 AND name = $2`,
 		userID, secretName,
-	).Scan(&value)
+	).Scan(&encrypted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", fmt.Errorf("%w: %s", ErrSecretNotFound, secretName)
 	}
+	plaintext, err := s.encryptor.Decrypt(encrypted)
 	if err != nil {
-		return "", fmt.Errorf("resolve secret: %w", err)
+		return "", fmt.Errorf("decrypt secret %q: %w", secretName, err)
 	}
-	return value, nil
+	return plaintext, nil
 }

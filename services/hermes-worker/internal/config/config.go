@@ -8,13 +8,14 @@ import (
 )
 
 type Config struct {
-	Environment  string
-	NatsURL      string
-	DbURL        string
-	MaxWorkers   int
-	JobQueueSize int
-	LogLevel     string
-	LogPretty    bool
+	Environment   string
+	EncryptionKey string
+	NatsURL       string
+	DbURL         string
+	MaxWorkers    int
+	JobQueueSize  int
+	LogLevel      string
+	LogPretty     bool
 }
 
 func getEnv(key, defaultValue string) string {
@@ -44,18 +45,25 @@ func getEnvBool(key string, defaultValue bool) bool {
 
 func LoadConfig() *Config {
 	cfg := &Config{
-		Environment:  getEnv("ENV", "development"),
-		NatsURL:      getEnv("NATS_URL", "nats://localhost:4222"),
-		DbURL:        getEnv("DATABASE_URL", "postgres://user:password@localhost:5432/hermes"),
-		MaxWorkers:   getEnvInt("MAX_WORKERS", 10),
-		JobQueueSize: getEnvInt("JOB_QUEUE_SIZE", 100),
-		LogLevel:     getEnv("LOG_LEVEL", "INFO"),
+		Environment:   getEnv("ENV", "development"),
+		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
+		NatsURL:       getEnv("NATS_URL", "nats://localhost:4222"),
+		DbURL:         getEnv("DATABASE_URL", "postgres://user:password@localhost:5432/hermes"),
+		MaxWorkers:    getEnvInt("MAX_WORKERS", 10),
+		JobQueueSize:  getEnvInt("JOB_QUEUE_SIZE", 100),
+		LogLevel:      getEnv("LOG_LEVEL", "INFO"),
 	}
 	log.Printf("Loaded Config: Environment: %s, MaxWorkers: %d", cfg.Environment, cfg.MaxWorkers)
 	return cfg
 }
 
 func (c *Config) Validate() error {
+	if c.EncryptionKey == "" {
+		return fmt.Errorf("ENCRYPTION_KEY is required")
+	}
+	if c.NatsURL == "" {
+		return fmt.Errorf("NATS_URL is required")
+	}
 	if c.DbURL == "" {
 		return fmt.Errorf("DATABASE_URL is required")
 	}

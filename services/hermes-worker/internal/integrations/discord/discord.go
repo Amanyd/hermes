@@ -5,41 +5,67 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
 
-type DiscordSender struct {
+type Sender struct {
 	client *http.Client
 }
 
-func New() *DiscordSender {
-	return &DiscordSender{
+func New() *Sender {
+	return &Sender{
 		client: &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
-func (d *DiscordSender) Execute(ctx context.Context, config map[string]any, payload []byte) error {
-	url, ok := config["webhook_url"].(string)
-	if !ok || url == "" {
-		return fmt.Errorf("Missing webhook_url in relay config")
+func (d *Sender) Execute(ctx context.Context, config map[string]any, payload []byte) error {
+	url, _ := config["webhook_url"].(string)
+	if url == "" {
+		return fmt.Errorf("missing webhook_url in discord config")
 	}
-	msg := map[string]string{
-		"content": fmt.Sprintf("Relay Trigerred\n```json\n%s\n```", string(payload)),
+
+	messageTemplate, _ := config["message_template"].(string)
+	var content string
+	if messageTemplate != "" {
+		content = messageTemplate
+	} else {
+		content = fmt.Sprintf("Relay Triggered\n```json\n%s\n```", string(payload))
 	}
-	jsonBody, _ := json.Marshal(msg)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+
+	msg := map[string]string{"content": content}
+	jsonBody, err := json.Marshal(msg)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal discord body: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return err
+
+	var lastErr error
+	for attempt := range 3 {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonBody))
+		if reqErr != nil {
+			return fmt.Errorf("build request: %w", reqErr)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, doErr := d.client.Do(req)
+		if doErr != nil {
+			lastErr = doErr
+			time.Sleep(time.Duration(200*(attempt+1)) * time.Millisecond)
+			continue
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return nil
+		}
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			lastErr = fmt.Errorf("discord returned %d", resp.StatusCode)
+			time.Sleep(time.Duration(200*(attempt+1)) * time.Millisecond)
+			continue
+		}
+		return fmt.Errorf("discord returned non-retryable status %d", resp.StatusCode)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode > 400 {
-		return fmt.Errorf("Discord API error: %d", resp.StatusCode)
-	}
-	return nil
+	return fmt.Errorf("discord send failed after retries: %w", lastErr)
 }

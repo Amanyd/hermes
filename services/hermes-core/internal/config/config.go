@@ -8,10 +8,11 @@ import (
 )
 
 type Config struct {
-	Port        string
-	DatabaseURL string
-	LogLevel    string
-	Environment string
+	Port          string
+	DatabaseURL   string
+	LogLevel      string
+	Environment   string
+	EncryptionKey string
 }
 
 func getEnv(key, defaultValue string) string {
@@ -32,10 +33,11 @@ func LoadConfig() *Config {
 	}
 	log.Printf("Loaded Config: Port=%s", port)
 	return &Config{
-		Port:        port,
-		DatabaseURL: dbURL,
-		LogLevel:    getEnv("LOG_LEVEL", "INFO"),
-		Environment: getEnv("ENV", "development"),
+		Port:          port,
+		DatabaseURL:   dbURL,
+		LogLevel:      getEnv("LOG_LEVEL", "INFO"),
+		Environment:   getEnv("ENV", "development"),
+		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
 	}
 }
 
@@ -48,6 +50,9 @@ func (c *Config) Validate() error {
 	}
 	if c.DatabaseURL == "" {
 		return errors.New("DATABASE_URL can't be empty")
+	}
+	if c.EncryptionKey == "" {
+		return errors.New("ENCRYPTION_KEY is required")
 	}
 	validLogLevels := map[string]bool{
 		"DEBUG": true,

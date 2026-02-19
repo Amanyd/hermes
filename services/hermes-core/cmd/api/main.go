@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/encryptor"
 	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/logger"
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/api"
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/config"
@@ -26,7 +27,11 @@ func main() {
 		slog.String("version", "1.0.0"),
 		slog.String("port", cfg.Port),
 	)
-
+	enc, err := encryptor.NewEncryptor([]byte(cfg.EncryptionKey))
+	if err != nil {
+		appLogger.Error("encryption init failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
 	pool, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		appLogger.Error("database connection failed", slog.String("error", err.Error()))
@@ -36,7 +41,7 @@ func main() {
 	appLogger.Info("database connected")
 
 	relayStore := store.NewRelayStore(pool)
-	secretStore := store.NewSecretStore(pool)
+	secretStore := store.NewSecretStore(pool, enc)
 	handler := api.NewHandler(relayStore, secretStore, appLogger)
 	router := api.NewRouter(handler)
 
