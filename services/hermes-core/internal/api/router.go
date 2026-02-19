@@ -31,6 +31,10 @@ func NewRouter(h *Handler) *chi.Mux {
 		r.Put("/relays/{id}", h.UpdateRelay)
 		r.Delete("/relays/{id}", h.DeleteRelay)
 		r.Get("/relays/{id}/logs", h.GetRelayLogs)
+
+		r.Post("/secrets", h.CreateSecret)
+		r.Get("/secrets", h.ListSecrets)
+		r.Delete("/secrets/{id}", h.DeleteSecret)
 	})
 	return r
 }

@@ -36,7 +36,8 @@ func main() {
 	appLogger.Info("database connected")
 
 	relayStore := store.NewRelayStore(pool)
-	handler := api.NewHandler(relayStore, appLogger)
+	secretStore := store.NewSecretStore(pool)
+	handler := api.NewHandler(relayStore, secretStore, appLogger)
 	router := api.NewRouter(handler)
 
 	appLogger.Info("server listening", slog.String("port", cfg.Port))

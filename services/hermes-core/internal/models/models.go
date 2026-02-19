@@ -57,6 +57,20 @@ type ExecutionLog struct {
 	ExecutedAt   time.Time      `json:"executed_at"`
 }
 
+type Secret struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type CreateSecretRequest struct {
+	UserID string `json:"user_id"`
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+}
+
 type APIResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`

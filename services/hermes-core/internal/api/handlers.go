@@ -14,14 +14,17 @@ import (
 )
 
 type Handler struct {
-	store   *store.RelayStore
-	logger  *slog.Logger
-	baseURL string
+	store       *store.RelayStore
+	logger      *slog.Logger
+	secretStore *store.SecretStore
+	baseURL     string
 }
 
-func NewHandler(s *store.RelayStore, logger *slog.Logger) *Handler {
-	return &Handler{store: s, logger: logger, baseURL: "http://localhost:8080"}
+func NewHandler(s *store.RelayStore, ss *store.SecretStore, logger *slog.Logger) *Handler {
+	return &Handler{store: s, secretStore: ss, logger: logger, baseURL: "http://localhost:8080"}
 }
+
+//  RESPONSE HELPERS
 
 func (h *Handler) respondJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -46,6 +49,8 @@ func (h *Handler) respondSuccess(w http.ResponseWriter, status int, message stri
 		Data:    data,
 	})
 }
+
+// RELAY API
 
 func (h *Handler) CreateRelay(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateRelayRequest
@@ -231,9 +236,85 @@ func (h *Handler) DeleteRelay(w http.ResponseWriter, r *http.Request) {
 		})
 }
 
+// HEALTH CHECK
+
 func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, map[string]string{
 		"status":  "healthy",
 		"service": "hermes-core",
 	})
+}
+
+// SECRETS API
+
+func (h *Handler) CreateSecret(w http.ResponseWriter, r *http.Request) {
+	var req models.CreateSecretRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "Invalid JSON body", "INVALID_JSON")
+		return
+	}
+	if strings.TrimSpace(req.UserID) == "" {
+		h.respondError(w, http.StatusBadRequest, "user_id is required", "VALIDATION_ERROR")
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		h.respondError(w, http.StatusBadRequest, "name is required", "VALIDATION_ERROR")
+		return
+	}
+	if strings.TrimSpace(req.Value) == "" {
+		h.respondError(w, http.StatusBadRequest, "value is required", "VALIDATION_ERROR")
+		return
+	}
+	secret, err := h.secretStore.Create(r.Context(), req)
+	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			h.respondError(w, http.StatusConflict, err.Error(), "DUPLICATE_SECRET")
+			return
+		}
+		h.logger.Error("failed to create secret", slog.String("error", err.Error()))
+		h.respondError(w, http.StatusInternalServerError, "Failed to create secret", "DB_ERROR")
+		return
+	}
+	h.logger.Info("secret created", slog.String("secret_id", secret.ID),
+		slog.String("user_id", secret.UserID),
+		slog.String("name", secret.Name))
+	h.respondSuccess(w, http.StatusCreated, "Secret created", secret)
+}
+
+func (h *Handler) ListSecrets(w http.ResponseWriter, r *http.Request) {
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		h.respondError(w, http.StatusBadRequest, "user_id query param is required", "VALIDATION_ERROR")
+		return
+	}
+
+	secrets, err := h.secretStore.ListByUser(r.Context(), userID)
+	if err != nil {
+		h.logger.Error("failed to list secrets", slog.String("error", err.Error()))
+		h.respondError(w, http.StatusInternalServerError, "Failed to list secrets", "DB_ERROR")
+		return
+	}
+
+	h.respondSuccess(w, http.StatusOK, "", secrets)
+}
+
+func (h *Handler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
+	secretID := chi.URLParam(r, "id")
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		h.respondError(w, http.StatusBadRequest, "user_id query param is required", "VALIDATION_ERROR")
+		return
+	}
+
+	err := h.secretStore.Delete(r.Context(), userID, secretID)
+	if err != nil {
+		if errors.Is(err, store.ErrSecretNotFound) {
+			h.respondError(w, http.StatusNotFound, "Secret not found", "NOT_FOUND")
+			return
+		}
+		h.logger.Error("failed to delete secret", slog.String("error", err.Error()))
+		h.respondError(w, http.StatusInternalServerError, "Failed to delete secret", "DB_ERROR")
+		return
+	}
+	h.respondSuccess(w, http.StatusOK, "Secret deleted", map[string]string{"deleted_id": secretID})
 }
