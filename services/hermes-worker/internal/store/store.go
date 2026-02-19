@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -20,8 +21,9 @@ type Store struct {
 }
 
 var (
-	ErrRelayNotFound = errors.New("relay not found")
-	ErrNoActions     = errors.New("no actions configured for relay")
+	ErrRelayNotFound  = errors.New("relay not found")
+	ErrNoActions      = errors.New("no actions configured for relay")
+	ErrSecretNotFound = errors.New("secret not found")
 )
 
 func NewStore(dbURL string) (*Store, error) {
@@ -66,6 +68,18 @@ func (s *Store) GetRelayActions(ctx context.Context, relayID string) ([]RelayAct
 	return actions, nil
 }
 
+func (s *Store) GetRelayOwner(ctx context.Context, relayID string) (string, error) {
+	var userID string
+	err := s.db.QueryRow(ctx, `SELECT user_id FROM relays WHERE id = $1`, relayID).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrRelayNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("query relay owner: %w", err)
+	}
+	return userID, nil
+}
+
 func (s *Store) RegisterEvent(ctx context.Context, relayID, eventID string) (bool, error) {
 	if eventID == "" {
 		return true, nil
@@ -97,4 +111,19 @@ func (s *Store) LogExecution(ctx context.Context, relayID string, eventID string
 		return fmt.Errorf("failed to write execution log: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) ResolveSecret(ctx context.Context, userID, secretName string) (string, error) {
+	var value string
+	err := s.db.QueryRow(ctx,
+		`SELECT value FROM secrets WHERE user_id = $1 AND name = $2`,
+		userID, secretName,
+	).Scan(&value)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", fmt.Errorf("%w: %s", ErrSecretNotFound, secretName)
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve secret: %w", err)
+	}
+	return value, nil
 }

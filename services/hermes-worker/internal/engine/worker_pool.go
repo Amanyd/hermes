@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,17 +71,21 @@ func (wp *WorkerPool) worker(_ context.Context, id int) {
 				return
 			}
 			start := time.Now()
-			workerLogger.Info("processing relay", slog.String("relay_id", job.RelayID), slog.String("event_id", job.EventID))
+			workerLogger.Info("processing relay",
+				slog.String("relay_id", job.RelayID),
+				slog.String("event_id", job.EventID))
 			err := wp.process(wp.ctx, job, workerLogger)
 			duration := time.Since(start)
 			if err != nil {
-				workerLogger.Error("relay execution failed", slog.String("relay_id", job.RelayID),
+				workerLogger.Error("relay execution failed",
+					slog.String("relay_id", job.RelayID),
 					slog.String("event_id", job.EventID),
 					slog.Duration("duration", duration),
 					slog.String("error", err.Error()))
 				job.MsgAck(false)
 			} else {
-				workerLogger.Info("relay execution succeeded", slog.String("relay_id", job.RelayID),
+				workerLogger.Info("relay execution succeeded",
+					slog.String("relay_id", job.RelayID),
 					slog.String("event_id", job.EventID),
 					slog.Duration("duration", duration))
 				job.MsgAck(true)
@@ -118,11 +123,21 @@ func (wp *WorkerPool) process(ctx context.Context, job Job, logger *slog.Logger)
 			logger.Error("failed to save execution log", slog.String("error", logErr.Error()))
 		}
 	}()
+	userID, ownerErr := wp.Store.GetRelayOwner(ctx, job.RelayID)
+	if ownerErr != nil {
+		return ownerErr
+	}
+
 	actions, fetchErr := wp.Store.GetRelayActions(ctx, job.RelayID)
 	if fetchErr != nil {
 		return fetchErr
 	}
 	for _, act := range actions {
+		resolved, resolveErr := wp.resolveSecrets(ctx, userID, act.Config)
+		if resolveErr != nil {
+			return fmt.Errorf("action %s (order %d) secret resolution failed: %w",
+				act.ActionType, act.OrderIndex, resolveErr)
+		}
 		logger.Debug("executing action",
 			slog.String("action_type", act.ActionType),
 			slog.Int("order_index", act.OrderIndex),
@@ -131,11 +146,32 @@ func (wp *WorkerPool) process(ctx context.Context, job Job, logger *slog.Logger)
 		if pluginErr != nil {
 			return pluginErr
 		}
-		if execErr := executor.Execute(ctx, act.Config, job.Payload); execErr != nil {
+		if execErr := executor.Execute(ctx, resolved, job.Payload); execErr != nil {
 			return fmt.Errorf("action %s (order %d) failed: %w", act.ActionType, act.OrderIndex, execErr)
 		}
 	}
 	return nil
+}
+
+func (wp *WorkerPool) resolveSecrets(ctx context.Context, userID string, config map[string]any) (map[string]any, error) {
+	resolved := make(map[string]any, len(config))
+	for k, v := range config {
+		if strings.HasSuffix(k, "_ref") {
+			secretName, ok := v.(string)
+			if !ok {
+				return nil, fmt.Errorf("secret ref %q must be a string", k)
+			}
+			actualKey := strings.TrimSuffix(k, "_ref")
+			value, err := wp.Store.ResolveSecret(ctx, userID, secretName)
+			if err != nil {
+				return nil, fmt.Errorf("resolve %q: %w", secretName, err)
+			}
+			resolved[actualKey] = value
+		} else {
+			resolved[k] = v
+		}
+	}
+	return resolved, nil
 }
 
 func (wp *WorkerPool) Shutdown() {
