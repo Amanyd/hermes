@@ -12,6 +12,3 @@ CREATE TABLE IF NOT EXISTS secrets (
     );
 
 CREATE INDEX IF NOT EXISTS idx_secrets_user_id ON secrets(user_id);
-
-DROP INDEX IF EXISTS idx_secrets_user_id;
-DROP TABLE IF EXISTS secrets;
