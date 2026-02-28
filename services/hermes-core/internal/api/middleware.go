@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -12,19 +13,29 @@ type contextKey string
 
 const userIDKey contextKey = "user_id"
 
+func writeError(w http.ResponseWriter, status int, message, code string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]any{
+		"success": false,
+		"error":   message,
+		"code":    code,
+	})
+}
+
 func JWTAuth(jwtSecret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			
+
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				http.Error(w, `{"success":false,"error":"Missing authorization header","code":"AUTH_REQUIRED"}`, http.StatusUnauthorized)
+				writeError(w, http.StatusUnauthorized, "Missing authorization header", "AUTH_REQUIRED")
 				return
 			}
 
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || parts[0] != "Bearer" {
-				http.Error(w, `{"success":false,"error":"Invalid authorization format","code":"AUTH_INVALID"}`, http.StatusUnauthorized)
+				writeError(w, http.StatusUnauthorized, "Invalid authorization format", "AUTH_INVALID")
 				return
 			}
 			tokenString := parts[1]
@@ -33,13 +44,13 @@ func JWTAuth(jwtSecret string) func(http.Handler) http.Handler {
 				return []byte(jwtSecret), nil
 			}, jwt.WithValidMethods([]string{"HS256"}))
 			if err != nil || !token.Valid {
-				http.Error(w, `{"success":false,"error":"Invalid or expired token","code":"AUTH_INVALID"}`, http.StatusUnauthorized)
+				writeError(w, http.StatusUnauthorized, "Invalid or expired token", "AUTH_INVALID")
 				return
 			}
 
 			subject, err := token.Claims.GetSubject()
 			if err != nil || subject == "" {
-				http.Error(w, `{"success":false,"error":"Invalid token claims","code":"AUTH_INVALID"}`, http.StatusUnauthorized)
+				writeError(w, http.StatusUnauthorized, "Invalid token claims", "AUTH_INVALID")
 				return
 			}
 
