@@ -42,8 +42,9 @@ func main() {
 
 	relayStore := store.NewRelayStore(pool)
 	secretStore := store.NewSecretStore(pool, enc)
-	handler := api.NewHandler(relayStore, secretStore, appLogger)
-	router := api.NewRouter(handler)
+	userStore := store.NewUserStore(pool)
+	handler := api.NewHandler(relayStore, secretStore, userStore, cfg.JWTSecret, appLogger)
+	router := api.NewRouter(handler, cfg.JWTSecret)
 
 	appLogger.Info("server listening", slog.String("port", cfg.Port))
 	if err := http.ListenAndServe(":"+cfg.Port, router); err != nil {

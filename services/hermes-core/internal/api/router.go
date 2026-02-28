@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func NewRouter(h *Handler) *chi.Mux {
+func NewRouter(h *Handler, jwtSecret string) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -25,16 +25,25 @@ func NewRouter(h *Handler) *chi.Mux {
 	r.Get("/health", h.HealthCheck)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Post("/relays", h.CreateRelay)
-		r.Get("/relays", h.GetAllRelays)
-		r.Get("/relays/{id}", h.GetRelay)
-		r.Put("/relays/{id}", h.UpdateRelay)
-		r.Delete("/relays/{id}", h.DeleteRelay)
-		r.Get("/relays/{id}/logs", h.GetRelayLogs)
+		// Public routes
+		r.Post("/auth/register", h.Register)
+		r.Post("/auth/login", h.Login)
 
-		r.Post("/secrets", h.CreateSecret)
-		r.Get("/secrets", h.ListSecrets)
-		r.Delete("/secrets/{id}", h.DeleteSecret)
+		// Protected routes
+		r.Group(func(r chi.Router) {
+			r.Use(JWTAuth(jwtSecret))
+
+			r.Post("/relays", h.CreateRelay)
+			r.Get("/relays", h.GetAllRelays)
+			r.Get("/relays/{id}", h.GetRelay)
+			r.Put("/relays/{id}", h.UpdateRelay)
+			r.Delete("/relays/{id}", h.DeleteRelay)
+			r.Get("/relays/{id}/logs", h.GetRelayLogs)
+
+			r.Post("/secrets", h.CreateSecret)
+			r.Get("/secrets", h.ListSecrets)
+			r.Delete("/secrets/{id}", h.DeleteSecret)
+		})
 	})
 	return r
 }
