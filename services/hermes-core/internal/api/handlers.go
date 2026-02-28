@@ -18,10 +18,12 @@ type Handler struct {
 	logger      *slog.Logger
 	secretStore *store.SecretStore
 	baseURL     string
+	userStore   *store.UserStore
+	jwtSecret   string
 }
 
-func NewHandler(s *store.RelayStore, ss *store.SecretStore, logger *slog.Logger) *Handler {
-	return &Handler{store: s, secretStore: ss, logger: logger, baseURL: "http://localhost:8080"}
+func NewHandler(s *store.RelayStore, ss *store.SecretStore, us *store.UserStore, jwtSecret string, logger *slog.Logger) *Handler {
+	return &Handler{store: s, secretStore: ss, userStore: us, jwtSecret: jwtSecret, logger: logger, baseURL: "http://localhost:8080"}
 }
 
 //  RESPONSE HELPERS
@@ -59,15 +61,15 @@ func (h *Handler) CreateRelay(w http.ResponseWriter, r *http.Request) {
 			slog.String("error", err.Error()),
 			slog.String("path", r.URL.Path),
 		)
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		h.respondError(w, http.StatusBadRequest, "Invalid JSON body", "INVALID_JSON")
 		return
 	}
+
+	userID := GetUserID(r)
+	req.UserID = userID
+
 	if strings.TrimSpace(req.Name) == "" {
 		h.respondError(w, http.StatusBadRequest, "Name is required", "VALIDATION_ERROR")
-		return
-	}
-	if strings.TrimSpace(req.UserID) == "" {
-		h.respondError(w, http.StatusBadRequest, "UserID is required", "VALIDATION_ERROR")
 		return
 	}
 	if len(req.Actions) == 0 {
@@ -94,7 +96,7 @@ func (h *Handler) CreateRelay(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("failed to create relay",
 			slog.String("error", err.Error()),
-			slog.String("user_id", req.UserID),
+			slog.String("user_id", userID),
 		)
 		h.respondError(w, http.StatusInternalServerError, "Failed to create relay", "DB_ERROR")
 		return
@@ -103,7 +105,7 @@ func (h *Handler) CreateRelay(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Info("relay created",
 		slog.String("relay_id", relay.ID),
-		slog.String("user_id", req.UserID),
+		slog.String("user_id", userID),
 		slog.Int("action_count", len(relay.Actions)),
 	)
 
@@ -112,7 +114,7 @@ func (h *Handler) CreateRelay(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetAllRelays(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id")
+	userID := GetUserID(r)
 
 	h.logger.Debug("fetching all relays",
 		slog.String("user_id", userID),
@@ -253,10 +255,9 @@ func (h *Handler) CreateSecret(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "Invalid JSON body", "INVALID_JSON")
 		return
 	}
-	if strings.TrimSpace(req.UserID) == "" {
-		h.respondError(w, http.StatusBadRequest, "user_id is required", "VALIDATION_ERROR")
-		return
-	}
+
+	req.UserID = GetUserID(r)
+
 	if strings.TrimSpace(req.Name) == "" {
 		h.respondError(w, http.StatusBadRequest, "name is required", "VALIDATION_ERROR")
 		return
@@ -282,11 +283,7 @@ func (h *Handler) CreateSecret(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListSecrets(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id")
-	if userID == "" {
-		h.respondError(w, http.StatusBadRequest, "user_id query param is required", "VALIDATION_ERROR")
-		return
-	}
+	userID := GetUserID(r)
 
 	secrets, err := h.secretStore.ListByUser(r.Context(), userID)
 	if err != nil {
@@ -300,11 +297,7 @@ func (h *Handler) ListSecrets(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	secretID := chi.URLParam(r, "id")
-	userID := r.URL.Query().Get("user_id")
-	if userID == "" {
-		h.respondError(w, http.StatusBadRequest, "user_id query param is required", "VALIDATION_ERROR")
-		return
-	}
+	userID := GetUserID(r)
 
 	err := h.secretStore.Delete(r.Context(), userID, secretID)
 	if err != nil {

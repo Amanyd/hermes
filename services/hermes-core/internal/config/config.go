@@ -13,6 +13,7 @@ type Config struct {
 	LogLevel      string
 	Environment   string
 	EncryptionKey string
+	JWTSecret     string
 }
 
 func getEnv(key, defaultValue string) string {
@@ -38,6 +39,7 @@ func LoadConfig() *Config {
 		LogLevel:      getEnv("LOG_LEVEL", "INFO"),
 		Environment:   getEnv("ENV", "development"),
 		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
+		JWTSecret:     os.Getenv("JWT_SECRET"),
 	}
 }
 
@@ -53,6 +55,9 @@ func (c *Config) Validate() error {
 	}
 	if c.EncryptionKey == "" {
 		return errors.New("ENCRYPTION_KEY is required")
+	}
+	if c.JWTSecret == "" {
+		return errors.New("JWT_SECRET is required")
 	}
 	validLogLevels := map[string]bool{
 		"DEBUG": true,

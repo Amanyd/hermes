@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -48,10 +49,8 @@ CREATE INDEX IF NOT EXISTS idx_relay_actions_relay_id ON relay_actions(relay_id)
 CREATE INDEX IF NOT EXISTS idx_execution_logs_relay_id ON execution_logs(relay_id);
 CREATE INDEX IF NOT EXISTS idx_execution_logs_executed_at ON execution_logs(executed_at DESC);
 
--- Insert test data
-INSERT INTO users (id, username, email) VALUES
-    ('d9fe070a-7cf4-4f8c-9421-92776741d412', 'testuser', 'test@hermes.dev')
-ON CONFLICT (email) DO NOTHING;
+-- Insert test data (removing because not needed anymore)
+
 
 -- INSERT INTO relays (id, user_id, name, description, webhook_path) VALUES
 --     (
