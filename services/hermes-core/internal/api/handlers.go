@@ -84,9 +84,20 @@ func (h *Handler) CreateRelay(w http.ResponseWriter, r *http.Request) {
 				"VALIDATION_ERROR")
 			return
 		}
+		if !IsValidActionType(action.ActionType) {
+			h.respondError(w, http.StatusBadRequest,
+				"Unknown action type '"+action.ActionType+"' at index "+strconv.Itoa(i),
+				"VALIDATION_ERROR")
+		}
 		if action.Config == nil {
 			h.respondError(w, http.StatusBadRequest,
 				"Config is required for action at index "+strconv.Itoa(i),
+				"VALIDATION_ERROR")
+			return
+		}
+		if err := ValidateActionConfig(action.ActionType, action.Config); err != nil {
+			h.respondError(w, http.StatusBadRequest,
+				"Invalid config for action at index"+strconv.Itoa(i)+": "+err.Error(),
 				"VALIDATION_ERROR")
 			return
 		}

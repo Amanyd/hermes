@@ -133,7 +133,7 @@ func (s *RelayStore) GetRelay(ctx context.Context, relayID string) (*models.Rela
 	queryRelay := `
 		SELECT id, user_id, name, description, webhook_path, is_active, created_at, updated_at
 		FROM relays
-		WHERE id = $1
+		WHERE id = $1 AND user_id=$2
 	`
 
 	var relay models.Relay
@@ -201,7 +201,7 @@ func (s *RelayStore) GetRelay(ctx context.Context, relayID string) (*models.Rela
 	}, nil
 }
 
-func (s *RelayStore) UpdateRelay(ctx context.Context, relayID string, req models.UpdateRelayRequest) (*models.Relay, error) {
+func (s *RelayStore) UpdateRelay(ctx context.Context, relayID, userID string, req models.UpdateRelayRequest) (*models.Relay, error) {
 	query := `UPDATE relays SET updated_at = $1`
 	args := []any{time.Now()}
 	argIdx := 2
@@ -221,8 +221,8 @@ func (s *RelayStore) UpdateRelay(ctx context.Context, relayID string, req models
 		args = append(args, *req.IsActive)
 		argIdx++
 	}
-	query += fmt.Sprintf(" WHERE id = $%d RETURNING id, user_id, name, description, webhook_path, is_active, created_at, updated_at", argIdx)
-	args = append(args, relayID)
+	query += fmt.Sprintf(" WHERE id = $%d AND user_id = %d RETURNING id, user_id, name, description, webhook_path, is_active, created_at, updated_at", argIdx, argIdx+1)
+	args = append(args, relayID, userID)
 	var relay models.Relay
 	err := s.db.QueryRow(ctx, query, args...).Scan(
 		&relay.ID,
@@ -244,9 +244,9 @@ func (s *RelayStore) UpdateRelay(ctx context.Context, relayID string, req models
 	return &relay, nil
 }
 
-func (s *RelayStore) DeleteRelay(ctx context.Context, relayID string) error {
-	query := `DELETE FROM relays WHERE id = $1`
-	result, err := s.db.Exec(ctx, query, relayID)
+func (s *RelayStore) DeleteRelay(ctx context.Context, relayID, userID string) error {
+	query := `DELETE FROM relays WHERE id = $1 AND user_id= $2`
+	result, err := s.db.Exec(ctx, query, relayID, userID)
 	if err != nil {
 		return fmt.Errorf("delete relay: %w", err)
 	}
@@ -258,7 +258,7 @@ func (s *RelayStore) DeleteRelay(ctx context.Context, relayID string) error {
 	return nil
 }
 
-func (s *RelayStore) GetLogs(ctx context.Context, relayID string, limit int) ([]models.ExecutionLog, error) {
+func (s *RelayStore) GetLogs(ctx context.Context, relayID, userID string, limit int) ([]models.ExecutionLog, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -266,12 +266,12 @@ func (s *RelayStore) GetLogs(ctx context.Context, relayID string, limit int) ([]
 	query := `
 		SELECT id, relay_id, status, payload, error_message, executed_at
 		FROM execution_logs
-		WHERE relay_id = $1
+		WHERE relay_id = $1 AND user_id = $2
 		ORDER BY executed_at DESC
-		LIMIT $2
+		LIMIT $3
 	`
 
-	rows, err := s.db.Query(ctx, query, relayID, limit)
+	rows, err := s.db.Query(ctx, query, relayID, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query logs: %w", err)
 	}
@@ -279,33 +279,33 @@ func (s *RelayStore) GetLogs(ctx context.Context, relayID string, limit int) ([]
 
 	logs := make([]models.ExecutionLog, 0)
 	for rows.Next() {
-		var log models.ExecutionLog
+		var l models.ExecutionLog
 		var payloadBytes []byte
 		var errorMsg *string
 
 		err := rows.Scan(
-			&log.ID,
-			&log.RelayID,
-			&log.Status,
+			&l.ID,
+			&l.RelayID,
+			&l.Status,
 			&payloadBytes,
 			&errorMsg,
-			&log.ExecutedAt,
+			&l.ExecutedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan log: %w", err)
 		}
 
 		if len(payloadBytes) > 0 {
-			if err := json.Unmarshal(payloadBytes, &log.Payload); err != nil {
+			if err := json.Unmarshal(payloadBytes, &l.Payload); err != nil {
 				return nil, fmt.Errorf("unmarshal payload: %w", err)
 			}
 		}
 
 		if errorMsg != nil {
-			log.ErrorMessage = *errorMsg
+			l.ErrorMessage = *errorMsg
 		}
 
-		logs = append(logs, log)
+		logs = append(logs, l)
 	}
 
 	if err := rows.Err(); err != nil {
