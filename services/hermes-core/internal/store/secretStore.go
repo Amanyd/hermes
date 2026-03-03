@@ -60,7 +60,7 @@ func (s *SecretStore) Create(ctx context.Context, req models.CreateSecretRequest
 }
 
 func (s *SecretStore) ListByUser(ctx context.Context, userID string) ([]models.Secret, error) {
-	query := `SELECT id, user_id, name, created-at, updated-at FROM secrets WHERE user_id = $1 ORDER BY name ASC`
+	query := `SELECT id, user_id, name, created_at, updated_at FROM secrets WHERE user_id = $1 ORDER BY name ASC`
 	rows, err := s.db.Query(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query secrets: %w", err)

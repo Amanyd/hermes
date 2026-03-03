@@ -67,9 +67,6 @@ func (c *Config) Validate() error {
 	if c.DbURL == "" {
 		return fmt.Errorf("DATABASE_URL is required")
 	}
-	if c.NatsURL == "" {
-		return fmt.Errorf("NATS_URL is required")
-	}
 	if c.MaxWorkers < 1 {
 		return fmt.Errorf("MAX_WORKERS must be atleast 1")
 	}

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const resendURL = "http://api.resend.com/emails"
+const resendURL = "https://api.resend.com/emails"
 
 type Sender struct {
 	client *http.Client

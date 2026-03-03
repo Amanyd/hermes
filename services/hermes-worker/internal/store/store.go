@@ -124,6 +124,9 @@ func (s *Store) ResolveSecret(ctx context.Context, userID, secretName string) (s
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", fmt.Errorf("%w: %s", ErrSecretNotFound, secretName)
 	}
+	if err != nil {
+		return "", fmt.Errorf("resolve secret: %w", err)
+	}
 	plaintext, err := s.encryptor.Decrypt(encrypted)
 	if err != nil {
 		return "", fmt.Errorf("decrypt secret %q: %w", secretName, err)

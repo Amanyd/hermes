@@ -57,8 +57,8 @@ func main() {
 	reg.Register("http_request", httpreq.New())
 	reg.Register("email_send", email.New())
 	appLogger.Info("integrations loaded",
-		slog.Int("count", 3),
-		slog.Any("types", []string{"debug_log", "discord_send", "slack_send"}),
+		slog.Int("count", reg.Count()),
+		slog.Any("types", reg.Types()),
 	)
 
 	pool := engine.NewWorkerPool(10, db, reg, appLogger)
