@@ -88,5 +88,5 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(fmt.Sprintf(`{"status":"queued", "event_id":"%s"}`, eventID)))
+	_, _ = fmt.Fprintf(w, `{"status":"queued", "event_id":"%s"}`, eventID)
 }
