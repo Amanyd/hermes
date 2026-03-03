@@ -39,3 +39,8 @@ func (r *Registry) Types() []string {
 	sort.Strings(types)
 	return types
 }
+
+func (r *Registry) Has(name string) bool {
+	_, exists := r.executors[name]
+	return exists
+}
