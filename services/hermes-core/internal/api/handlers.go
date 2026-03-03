@@ -14,19 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type Handler struct {
-	store       *store.RelayStore
-	logger      *slog.Logger
-	secretStore *store.SecretStore
-	baseURL     string
-	userStore   *store.UserStore
-	jwtSecret   string
-}
-
-func NewHandler(s *store.RelayStore, ss *store.SecretStore, us *store.UserStore, jwtSecret string, logger *slog.Logger) *Handler {
-	return &Handler{store: s, secretStore: ss, userStore: us, jwtSecret: jwtSecret, logger: logger, baseURL: "http://localhost:8080"}
-}
-
 //  RESPONSE HELPERS
 
 func (h *Handler) respondJSON(w http.ResponseWriter, status int, data any) {

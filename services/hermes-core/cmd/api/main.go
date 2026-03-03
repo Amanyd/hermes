@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/encryptor"
 	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/logger"
@@ -45,10 +49,30 @@ func main() {
 	userStore := store.NewUserStore(pool)
 	handler := api.NewHandler(relayStore, secretStore, userStore, cfg.JWTSecret, appLogger)
 	router := api.NewRouter(handler, cfg.JWTSecret)
-
-	appLogger.Info("server listening", slog.String("port", cfg.Port))
-	if err := http.ListenAndServe(":"+cfg.Port, router); err != nil {
-		appLogger.Error("server failed", slog.String("error", err.Error()))
-		os.Exit(1)
+	srv := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      router,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
+	go func() {
+		appLogger.Info("server listening", slog.String("port", cfg.Port))
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			appLogger.Error("server failed", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+	}()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+
+	appLogger.Info("shutdown signal received")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		appLogger.Error("server shutdown failed", slog.String("error", err.Error()))
+	}
+	appLogger.Info("server stopped gracefully")
 }

@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/logger"
 	"github.com/eulerbutcooler/hermes/services/hermes-hooks/internal/api"
@@ -32,9 +36,31 @@ func main() {
 	handler := api.NewHandler(natsQueue, appLogger)
 	r := api.NewRouter(handler)
 
-	appLogger.Info("webhook server listening", slog.String("port", cfg.Port))
-	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
-		appLogger.Error("server failed", slog.String("error", err.Error()))
-		os.Exit(1)
+	srv := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      r,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  30 * time.Second,
 	}
+
+	go func() {
+		appLogger.Info("webhook server listening", slog.String("port", cfg.Port))
+		if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
+			appLogger.Error("server failed", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+	}()
+
+	sigChan := make(chan os.Signal, 2)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+	appLogger.Info("shutdown signal received")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		appLogger.Error("server shutdown failed", slog.String("error", err.Error()))
+	}
+	appLogger.Info("hooks server stopped gracefully")
+
 }
