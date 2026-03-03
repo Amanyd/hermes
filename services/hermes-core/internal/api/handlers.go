@@ -154,6 +154,7 @@ func (h *Handler) GetAllRelays(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetRelayLogs(w http.ResponseWriter, r *http.Request) {
 	relayID := chi.URLParam(r, "id")
+	userID := GetUserID(r)
 	limit := 50
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
@@ -162,7 +163,7 @@ func (h *Handler) GetRelayLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	h.logger.Debug("fetching relay logs", slog.String("relay_id", relayID),
 		slog.Int("limit", limit))
-	logs, err := h.store.GetLogs(r.Context(), relayID, limit)
+	logs, err := h.store.GetLogs(r.Context(), relayID, userID, limit)
 	if err != nil {
 		h.logger.Error("failed to fetch logs", slog.String("relay_id", relayID),
 			slog.String("error", err.Error()))
@@ -175,8 +176,9 @@ func (h *Handler) GetRelayLogs(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetRelay(w http.ResponseWriter, r *http.Request) {
 	relayID := chi.URLParam(r, "id")
+	userID := GetUserID(r)
 	h.logger.Debug("fetching relay", slog.String("relay_id", relayID))
-	relay, err := h.store.GetRelay(r.Context(), relayID)
+	relay, err := h.store.GetRelay(r.Context(), relayID, userID)
 	if err != nil {
 		if errors.Is(err, store.ErrRelayNotFound) {
 			h.logger.Warn("relay not found", slog.String("relay_id", relayID))
@@ -201,6 +203,7 @@ func (h *Handler) GetRelay(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) UpdateRelay(w http.ResponseWriter, r *http.Request) {
 	relayID := chi.URLParam(r, "id")
+	userID := GetUserID(r)
 	var req models.UpdateRelayRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.logger.Warn("invalid request body", slog.String("error", err.Error()))
@@ -211,7 +214,7 @@ func (h *Handler) UpdateRelay(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "No fields to update", "VALIDATION_ERROR")
 		return
 	}
-	relay, err := h.store.UpdateRelay(r.Context(), relayID, req)
+	relay, err := h.store.UpdateRelay(r.Context(), relayID, userID, req)
 	if err != nil {
 		if errors.Is(err, store.ErrRelayNotFound) {
 			h.logger.Warn("relay not found", slog.String("relay_id", relayID))
@@ -230,7 +233,8 @@ func (h *Handler) UpdateRelay(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DeleteRelay(w http.ResponseWriter, r *http.Request) {
 	relayID := chi.URLParam(r, "id")
-	err := h.store.DeleteRelay(r.Context(), relayID)
+	userID := GetUserID(r)
+	err := h.store.DeleteRelay(r.Context(), relayID, userID)
 	if err != nil {
 		if errors.Is(err, store.ErrRelayNotFound) {
 			h.logger.Warn("relay not found for deletion", slog.String("relay_id", relayID))

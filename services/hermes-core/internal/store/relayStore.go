@@ -129,7 +129,7 @@ func (s *RelayStore) GetAllRelays(ctx context.Context, userID string) ([]models.
 	return relays, nil
 }
 
-func (s *RelayStore) GetRelay(ctx context.Context, relayID string) (*models.RelayWithActions, error) {
+func (s *RelayStore) GetRelay(ctx context.Context, relayID, userID string) (*models.RelayWithActions, error) {
 	queryRelay := `
 		SELECT id, user_id, name, description, webhook_path, is_active, created_at, updated_at
 		FROM relays
