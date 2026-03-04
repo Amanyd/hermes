@@ -83,7 +83,6 @@ type ErrorResponse struct {
 	Code    string `json:"code,omitempty"`
 }
 
-
 // Auth models
 
 type User struct {
@@ -109,4 +108,29 @@ type LoginRequest struct {
 type AuthResponse struct {
 	Token string `json:"token"`
 	User  User   `json:"user"`
+}
+
+// OAuth models
+
+type Connection struct {
+	ID           string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	Provider     string    `json:"provider"`
+	AccountEmail string    `json:"account_email"`
+	Scopes       string    `json:"scopes"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type ConnectionInternal struct {
+	Connection
+	AccessToken  string    `json:"-"`
+	RefreshToken string    `json:"-"`
+	TokenExpiry  time.Time `json:"-"`
+}
+
+type OAuthCallbackParams struct {
+	Provider string
+	Code     string
+	State    string
 }
