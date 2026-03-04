@@ -40,7 +40,7 @@ func NewWorkerPool(maxWorkers int, db *store.Store, reg *Registry, logger *slog.
 	}
 }
 
-// Spaws all worker goroutines
+// Spawns all worker goroutines
 func (wp *WorkerPool) Start(ctx context.Context) {
 	wp.ctx, wp.cancel = context.WithCancel(ctx)
 	wp.Logger.Info("starting worker pool",
