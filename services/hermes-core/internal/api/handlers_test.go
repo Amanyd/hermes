@@ -39,6 +39,8 @@ type mockRelayStore struct {
 	getLogsErr    error
 }
 
+// RELAY TESTS
+
 func (m *mockRelayStore) CreateRelay(_ context.Context, req models.CreateRelayRequest) (*models.RelayWithActions, error) {
 	m.createRelayCalled = true
 	m.createRelayReq = req
