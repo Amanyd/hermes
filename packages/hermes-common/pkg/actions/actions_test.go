@@ -135,7 +135,7 @@ func TestValidateConfig_HTTPRequest(t *testing.T) {
 // Checks all required fields for the email integration
 func TestValidateConfig_EmailSend(t *testing.T) {
 	err := ValidateConfig("email_send", map[string]any{})
-	if err != nil {
+	if err == nil {
 		t.Error("email_send with empty config should fail")
 	}
 
@@ -143,7 +143,7 @@ func TestValidateConfig_EmailSend(t *testing.T) {
 		"api_key": "re_1234",
 		"from":    "noreply@hermes.dev",
 	})
-	if err != nil {
+	if err == nil {
 		t.Error("email_send missing 'to' should fail")
 	}
 
