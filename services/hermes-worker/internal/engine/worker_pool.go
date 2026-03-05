@@ -2,12 +2,14 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/templateengine"
 	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/store"
 )
 
@@ -132,12 +134,18 @@ func (wp *WorkerPool) process(ctx context.Context, job Job, logger *slog.Logger)
 	if fetchErr != nil {
 		return fetchErr
 	}
+
+	outputs := make([]StepOutput, 0, len(actions))
+
+	teSteps := make([]templateengine.StepOutput, 0, len(actions))
+
 	for _, act := range actions {
 		resolved, resolveErr := wp.resolveSecrets(ctx, userID, act.Config)
 		if resolveErr != nil {
 			return fmt.Errorf("action %s (order %d) secret resolution failed: %w",
 				act.ActionType, act.OrderIndex, resolveErr)
 		}
+		resolved = templateengine.Resolve(resolved, job.Payload, teSteps)
 		logger.Debug("executing action",
 			slog.String("action_type", act.ActionType),
 			slog.Int("order_index", act.OrderIndex),
@@ -146,9 +154,21 @@ func (wp *WorkerPool) process(ctx context.Context, job Job, logger *slog.Logger)
 		if pluginErr != nil {
 			return pluginErr
 		}
-		if execErr := executor.Execute(ctx, resolved, job.Payload); execErr != nil {
+		output, execErr := executor.Execute(ctx, resolved, job.Payload, outputs)
+		if execErr != nil {
 			return fmt.Errorf("action %s (order %d) failed: %w", act.ActionType, act.OrderIndex, execErr)
 		}
+		stepOut := StepOutput{
+			ActionType: act.ActionType,
+			OrderIndex: act.OrderIndex,
+			Output:     output,
+		}
+		outputs = append(outputs, stepOut)
+		teSteps = append(teSteps, templateengine.StepOutput{
+			ActionType: act.ActionType,
+			OrderIndex: act.OrderIndex,
+			Output:     json.RawMessage(output),
+		})
 	}
 	return nil
 }

@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/engine"
 )
 
 type Sender struct {
@@ -20,10 +22,10 @@ func New() *Sender {
 	}
 }
 
-func (d *Sender) Execute(ctx context.Context, config map[string]any, payload []byte) error {
+func (d *Sender) Execute(ctx context.Context, config map[string]any, payload []byte, _ []engine.StepOutput) (json.RawMessage, error) {
 	url, _ := config["webhook_url"].(string)
 	if url == "" {
-		return fmt.Errorf("missing webhook_url in discord config")
+		return nil, fmt.Errorf("missing webhook_url in discord config")
 	}
 
 	messageTemplate, _ := config["message_template"].(string)
@@ -37,14 +39,14 @@ func (d *Sender) Execute(ctx context.Context, config map[string]any, payload []b
 	msg := map[string]string{"content": content}
 	jsonBody, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("marshal discord body: %w", err)
+		return nil, fmt.Errorf("marshal discord body: %w", err)
 	}
 
 	var lastErr error
 	for attempt := range 3 {
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonBody))
 		if reqErr != nil {
-			return fmt.Errorf("build request: %w", reqErr)
+			return nil, fmt.Errorf("build request: %w", reqErr)
 		}
 		req.Header.Set("Content-Type", "application/json")
 
@@ -58,14 +60,15 @@ func (d *Sender) Execute(ctx context.Context, config map[string]any, payload []b
 		resp.Body.Close()
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return nil
+			output, _ := json.Marshal(map[string]any{"status": "sent", "channel": url})
+			return output, nil
 		}
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			lastErr = fmt.Errorf("discord returned %d", resp.StatusCode)
 			time.Sleep(time.Duration(200*(attempt+1)) * time.Millisecond)
 			continue
 		}
-		return fmt.Errorf("discord returned non-retryable status %d", resp.StatusCode)
+		return nil, fmt.Errorf("discord returned non-retryable status %d", resp.StatusCode)
 	}
-	return fmt.Errorf("discord send failed after retries: %w", lastErr)
+	return nil, fmt.Errorf("discord send failed after retries: %w", lastErr)
 }

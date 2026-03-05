@@ -3,11 +3,14 @@ package httpreq
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/engine"
 )
 
 var allowedMethods = map[string]bool{
@@ -28,10 +31,10 @@ func New() *Executor {
 	}
 }
 
-func (e *Executor) Execute(ctx context.Context, cfg map[string]any, payload []byte) error {
+func (e *Executor) Execute(ctx context.Context, cfg map[string]any, payload []byte, _ []engine.StepOutput) (json.RawMessage, error) {
 	url, _ := cfg["url"].(string)
 	if url == "" {
-		return fmt.Errorf("missing url in http_request config")
+		return nil, fmt.Errorf("missing url in http_request config")
 	}
 	method, _ := cfg["method"].(string)
 	method = strings.ToUpper(method)
@@ -39,7 +42,7 @@ func (e *Executor) Execute(ctx context.Context, cfg map[string]any, payload []by
 		method = http.MethodPost
 	}
 	if !allowedMethods[method] {
-		return fmt.Errorf("unsupported HTTP method: %s", method)
+		return nil, fmt.Errorf("unsupported HTTP method: %s", method)
 	}
 	var body io.Reader
 	if method != http.MethodGet {
@@ -54,7 +57,7 @@ func (e *Executor) Execute(ctx context.Context, cfg map[string]any, payload []by
 	for attempt := range 3 {
 		req, err := http.NewRequestWithContext(ctx, method, url, body)
 		if err != nil {
-			return fmt.Errorf("build request: %w", err)
+			return nil, fmt.Errorf("build request: %w", err)
 		}
 		if method != http.MethodGet {
 			req.Header.Set("Content-Type", "application/json")
@@ -74,18 +77,22 @@ func (e *Executor) Execute(ctx context.Context, cfg map[string]any, payload []by
 			time.Sleep(time.Duration(300*(attempt+1)) * time.Millisecond)
 			continue
 		}
-		io.Copy(io.Discard, resp.Body)
+		respBody, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return nil
+			output, _ := json.Marshal(map[string]any{
+				"status_code": resp.StatusCode,
+				"body":        json.RawMessage(respBody),
+			})
+			return output, nil
 		}
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			lastErr = fmt.Errorf("http_request returned %d", resp.StatusCode)
 			time.Sleep(time.Duration(300*(attempt)+1) * time.Millisecond)
 			continue
 		}
-		return fmt.Errorf("http_request returned non-retryable status %d", resp.StatusCode)
+		return nil, fmt.Errorf("http_request returned non-retryable status %d", resp.StatusCode)
 	}
-	return fmt.Errorf("http_request failed after retries: %w", lastErr)
+	return nil, fmt.Errorf("http_request failed after retries: %w", lastErr)
 }

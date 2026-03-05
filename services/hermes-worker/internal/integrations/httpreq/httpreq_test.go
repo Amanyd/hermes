@@ -28,7 +28,7 @@ func TestExecute_PostSuccess(t *testing.T) {
 		"method": "POST",
 	}
 	payload := []byte(`{"data":"value"`)
-	err := executor.Execute(context.Background(), cfg, payload)
+	_, err := executor.Execute(context.Background(), cfg, payload, nil)
 	if err != nil {
 		t.Fatalf("expected no error, go: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestExecute_DefaultMethodIsPost(t *testing.T) {
 	defer srv.Close()
 	executor := New()
 	executor.client = srv.Client()
-	err := executor.Execute(context.Background(), map[string]any{"url": srv.URL}, []byte(`{}`))
+	_, err := executor.Execute(context.Background(), map[string]any{"url": srv.URL}, []byte(`{}`), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestExecute_DefaultMethodIsPost(t *testing.T) {
 // Ensures a missing URL returns an error immediately
 func TestExecute_MissingURL(t *testing.T) {
 	executor := New()
-	err := executor.Execute(context.Background(), map[string]any{}, []byte(`{}`))
+	_, err := executor.Execute(context.Background(), map[string]any{}, []byte(`{}`), nil)
 	if err == nil {
 		t.Error("expected error for missing url")
 	}
@@ -68,10 +68,10 @@ func TestExecute_MissingURL(t *testing.T) {
 // Verifies that unsupported HTTP methods are rejected
 func TestExecute_UnsupportedMethod(t *testing.T) {
 	executor := New()
-	err := executor.Execute(context.Background(), map[string]any{
+	_, err := executor.Execute(context.Background(), map[string]any{
 		"url":    "http://blahblah.com",
 		"method": "OPTIONS",
-	}, []byte(`{}`))
+	}, []byte(`{}`), nil)
 	if err == nil {
 		t.Error("expected error for unsupported method")
 	}
@@ -92,7 +92,7 @@ func TestExecute_CustomHeaders(t *testing.T) {
 		"method":  "POST",
 		"headers": map[string]any{"X-Api-Key": "secret-123"},
 	}
-	err := executor.Execute(context.Background(), cfg, []byte(`{}`))
+	_, err := executor.Execute(context.Background(), cfg, []byte(`{}`), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestExecute_RetryOnServerError(t *testing.T) {
 	defer srv.Close()
 	executor := New()
 	executor.client = srv.Client()
-	err := executor.Execute(context.Background(), map[string]any{"url": srv.URL}, []byte(`{}`))
+	_, err := executor.Execute(context.Background(), map[string]any{"url": srv.URL}, []byte(`{}`), nil)
 	if err == nil {
 		t.Fatal("expected error after retries")
 	}

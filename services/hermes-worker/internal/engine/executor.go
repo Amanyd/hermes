@@ -12,5 +12,5 @@ type StepOutput struct {
 }
 
 type ActionExecutor interface {
-	Execute(ctx context.Context, config map[string]any, payload []byte, prevOutputs []StepOutput) error
+	Execute(ctx context.Context, config map[string]any, payload []byte, prevOutputs []StepOutput) (json.RawMessage, error)
 }

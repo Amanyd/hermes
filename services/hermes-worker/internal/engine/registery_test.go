@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -9,11 +10,12 @@ import (
 type fakeExecutor struct {
 	called bool
 	err    error
+	output json.RawMessage
 }
 
-func (f *fakeExecutor) Execute(_ context.Context, _ map[string]any, _ []byte) error {
+func (f *fakeExecutor) Execute(_ context.Context, _ map[string]any, _ []byte, _ []StepOutput) (json.RawMessage, error) {
 	f.called = true
-	return f.err
+	return f.output, f.err
 }
 
 func TestRegistery_RegisterAndGet(t *testing.T) {
@@ -25,7 +27,7 @@ func TestRegistery_RegisterAndGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("'Get' returned error: %v", err)
 	}
-	if err := got.Execute(context.Background(), nil, nil); err != nil {
+	if _, err := got.Execute(context.Background(), nil, nil, nil); err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
 	if !exec.called {
@@ -62,16 +64,16 @@ func TestRegistry_Count(t *testing.T) {
 // Verifies that Types() returns sorted names.
 func TestRegistry_Types(t *testing.T) {
 	reg := NewRegistry()
-	reg.Register("zebra", &fakeExecutor{})
-	reg.Register("alpha", &fakeExecutor{})
+	reg.Register("apple", &fakeExecutor{})
+	reg.Register("zango", &fakeExecutor{})
 
 	types := reg.Types()
 	if len(types) != 2 {
 		t.Fatalf("expected 2 types, got %d", len(types))
 	}
 	// Must be sorted alphabetically.
-	if types[0] != "alpha" || types[1] != "zebra" {
-		t.Errorf("expected [alpha, zebra], got %v", types)
+	if types[0] != "apple" || types[1] != "zango" {
+		t.Errorf("expected [apple, zango], got %v", types)
 	}
 }
 

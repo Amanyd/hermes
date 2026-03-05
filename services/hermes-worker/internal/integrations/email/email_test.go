@@ -101,7 +101,7 @@ func TestExecute_Success(t *testing.T) {
 		"body":          "World",
 	}
 
-	err := sender.Execute(context.Background(), cfg, []byte(`{}`))
+	_, err := sender.Execute(context.Background(), cfg, []byte(`{}`), nil)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestExecute_Success(t *testing.T) {
 // Verifies validation.
 func TestExecute_MissingConnectionID(t *testing.T) {
 	sender := New(nil, &fakeConnStore{})
-	err := sender.Execute(context.Background(), map[string]any{"to": "a@g.com"}, nil)
+	_, err := sender.Execute(context.Background(), map[string]any{"to": "a@g.com"}, nil, nil)
 	if err == nil {
 		t.Error("expected error for missing connection_id")
 	}
@@ -132,7 +132,7 @@ func TestExecute_MissingConnectionID(t *testing.T) {
 // Verifies validation.
 func TestExecute_MissingTo(t *testing.T) {
 	sender := New(nil, &fakeConnStore{})
-	err := sender.Execute(context.Background(), map[string]any{"connection_id": "c1"}, nil)
+	_, err := sender.Execute(context.Background(), map[string]any{"connection_id": "c1"}, nil, nil)
 	if err == nil {
 		t.Error("expected error for missing to")
 	}
@@ -143,10 +143,10 @@ func TestExecute_ConnectionNotFound(t *testing.T) {
 	fc := &fakeConnStore{getErr: fmt.Errorf("connection not found: conn-999")}
 	sender := New(map[string]oauth.Provider{}, fc)
 
-	err := sender.Execute(context.Background(), map[string]any{
+	_, err := sender.Execute(context.Background(), map[string]any{
 		"connection_id": "conn-999",
 		"to":            "a@b.com",
-	}, nil)
+	}, nil, nil)
 	if err == nil {
 		t.Error("expected error for missing connection")
 	}
@@ -171,10 +171,10 @@ func TestExecute_TokenRefresh(t *testing.T) {
 
 	sender := New(map[string]oauth.Provider{"google": fp}, fc)
 
-	err := sender.Execute(context.Background(), map[string]any{
+	_, err := sender.Execute(context.Background(), map[string]any{
 		"connection_id": "conn-1",
 		"to":            "bob@example.com",
-	}, []byte(`{}`))
+	}, []byte(`{}`), nil)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -200,10 +200,10 @@ func TestExecute_RefreshFailure(t *testing.T) {
 
 	sender := New(map[string]oauth.Provider{"google": fp}, fc)
 
-	err := sender.Execute(context.Background(), map[string]any{
+	_, err := sender.Execute(context.Background(), map[string]any{
 		"connection_id": "conn-1",
 		"to":            "a@b.com",
-	}, nil)
+	}, nil, nil)
 	if err == nil {
 		t.Error("expected error when refresh fails")
 	}
@@ -218,10 +218,10 @@ func TestExecute_UnsupportedProvider(t *testing.T) {
 
 	sender := New(map[string]oauth.Provider{"google": &fakeProvider{}}, fc)
 
-	err := sender.Execute(context.Background(), map[string]any{
+	_, err := sender.Execute(context.Background(), map[string]any{
 		"connection_id": "conn-1",
 		"to":            "a@b.com",
-	}, nil)
+	}, nil, nil)
 	if err == nil {
 		t.Error("expected error for unsupported provider")
 	}

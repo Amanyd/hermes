@@ -26,7 +26,7 @@ func TestExecute_Success(t *testing.T) {
 		"webhook_url": srv.URL,
 	}
 
-	err := sender.Execute(context.Background(), cfg, []byte(`{"event":"test"}`))
+	_, err := sender.Execute(context.Background(), cfg, []byte(`{"event":"test"}`), nil)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestExecute_Success(t *testing.T) {
 // Verifies that a missing webhook_url is rejected immediately
 func TestExecute_MissingURL(t *testing.T) {
 	sender := New()
-	err := sender.Execute(context.Background(), map[string]any{}, []byte(`{}`))
+	_, err := sender.Execute(context.Background(), map[string]any{}, []byte(`{}`), nil)
 	if err == nil {
 		t.Error("expected error for missing webhook_url")
 	}
@@ -52,7 +52,7 @@ func TestExecute_NonRetryableError(t *testing.T) {
 
 	sender := New()
 	sender.client = srv.Client()
-	err := sender.Execute(context.Background(), map[string]any{"webhook_url": srv.URL}, []byte(`{}`))
+	_, err := sender.Execute(context.Background(), map[string]any{"webhook_url": srv.URL}, []byte(`{}`), nil)
 	if err == nil {
 		t.Fatal("expected error for 400 response")
 	}
@@ -72,7 +72,7 @@ func TestExecute_RetryOn429(t *testing.T) {
 	defer srv.Close()
 	sender := New()
 	sender.client = srv.Client()
-	err := sender.Execute(context.Background(), map[string]any{"webhook_url": srv.URL}, []byte(`{}`))
+	_, err := sender.Execute(context.Background(), map[string]any{"webhook_url": srv.URL}, []byte(`{}`), nil)
 	if err == nil {
 		t.Fatal("expected error after retries")
 	}
@@ -92,7 +92,7 @@ func TestExecute_RetryOnServerError(t *testing.T) {
 	defer srv.Close()
 	sender := New()
 	sender.client = srv.Client()
-	err := sender.Execute(context.Background(), map[string]any{"webhook_url": srv.URL}, []byte(`{}`))
+	_, err := sender.Execute(context.Background(), map[string]any{"webhook_url": srv.URL}, []byte(`{}`), nil)
 	if err == nil {
 		t.Fatal("expected error after retries")
 	}
@@ -112,7 +112,7 @@ func TestExecute_CustomTemplate(t *testing.T) {
 		"webhook_url":      srv.URL,
 		"message_template": "Custom notification: yo pierre you wanna come out here?",
 	}
-	err := sender.Execute(context.Background(), cfg, []byte(`{}`))
+	_, err := sender.Execute(context.Background(), cfg, []byte(`{}`), nil)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
