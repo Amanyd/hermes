@@ -148,9 +148,10 @@ func TestValidateConfig_EmailSend(t *testing.T) {
 	}
 
 	err = ValidateConfig("email_send", map[string]any{
-		"api_key": "1234abc",
-		"from":    "email@email.com",
-		"to":      "reply@reply.com",
+		"api_key":       "1234abc",
+		"from":          "email@email.com",
+		"to":            "reply@reply.com",
+		"connection_id": "google.com/oauthid",
 	})
 	if err != nil {
 		t.Errorf("email_send with all fields should pass, got: %v", err)

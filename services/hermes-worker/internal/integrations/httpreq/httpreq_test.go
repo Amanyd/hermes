@@ -27,7 +27,7 @@ func TestExecute_PostSuccess(t *testing.T) {
 		"url":    srv.URL,
 		"method": "POST",
 	}
-	payload := []byte(`{"data":"value"`)
+	payload := []byte(`{"data":"value"}`)
 	_, err := executor.Execute(context.Background(), cfg, payload, nil)
 	if err != nil {
 		t.Fatalf("expected no error, go: %v", err)

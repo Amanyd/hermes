@@ -24,7 +24,7 @@ func (m *mockProducer) Publish(relayID string, event ExecutionEvent) error {
 	m.callCount++
 	m.lastRelayID = relayID
 	m.lastEvent = event
-	return nil
+	return m.publishErr
 }
 
 // Creates a chi router wired to the handler so the URL params work
@@ -32,7 +32,7 @@ func newTestRouter(p EventProducer) *chi.Mux {
 	testLogger := logger.New("hermes-hooks-test", "test", "debug")
 	h := NewHandler(p, testLogger)
 	r := chi.NewRouter()
-	r.Post("/hooks/{relayID", h.HandleWebhook)
+	r.Post("/hooks/{relayID}", h.HandleWebhook)
 	return r
 }
 
@@ -41,7 +41,7 @@ func TestHandlerWebhook_Success(t *testing.T) {
 	mock := &mockProducer{}
 	router := newTestRouter(mock)
 
-	body := []byte(`{"test": "data"}`)
+	body := []byte(`{"test":"data"}`)
 	req := httptest.NewRequest(http.MethodPost, "/hooks/relay-abc", bytes.NewReader(body))
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
