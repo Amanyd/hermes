@@ -44,8 +44,7 @@ var Registry = map[string]ActionSchema{
 	},
 	"email_send": {
 		Fields: []FieldRule{
-			{Name: "api_key", Alternatives: []string{"api_key", "api_key_ref"}},
-			{Name: "from"},
+			{Name: "connection_id", Alternatives: []string{"connection_id", "connection_id_ref"}},
 			{Name: "to"},
 		},
 	},

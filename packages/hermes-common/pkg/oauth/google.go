@@ -122,7 +122,7 @@ func (g *GoogleProvider) SendEmail(ctx context.Context, accessToken, from, to, s
 	encoded := base64.URLEncoding.EncodeToString([]byte(msg))
 	payload, _ := json.Marshal(map[string]string{"raw": encoded})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"https://gmail.googleapis.com/gmail/v`/users/me/message/send",
+		"https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
 		bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("build gmail request: %w", err)

@@ -7,6 +7,12 @@ import (
 	"strconv"
 )
 
+type OAuthProviderConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+}
+
 type Config struct {
 	Environment   string
 	EncryptionKey string
@@ -16,6 +22,9 @@ type Config struct {
 	JobQueueSize  int
 	LogLevel      string
 	LogPretty     bool
+
+	GoogleOAuth    *OAuthProviderConfig
+	MicrosoftOAuth *OAuthProviderConfig
 }
 
 func getEnv(key, defaultValue string) string {
@@ -53,6 +62,22 @@ func LoadConfig() *Config {
 		JobQueueSize:  getEnvInt("JOB_QUEUE_SIZE", 100),
 		LogLevel:      getEnv("LOG_LEVEL", "INFO"),
 	}
+
+	if id := os.Getenv("GOOGLE_CLIENT_ID"); id != "" {
+		cfg.GoogleOAuth = &OAuthProviderConfig{
+			ClientID:     id,
+			ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+			RedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:3000/api/v1/auth/callback/google"),
+		}
+	}
+	if id := os.Getenv("MICROSOFT_CLIENT_ID"); id != "" {
+		cfg.MicrosoftOAuth = &OAuthProviderConfig{
+			ClientID:     id,
+			ClientSecret: os.Getenv("MICROSOFT_CLIENT_SECRET"),
+			RedirectURL:  getEnv("MICROSOFT_REDIRECT_URL", "http://localhost:3000/api/v1/auth/callback/microsoft"),
+		}
+	}
+
 	log.Printf("Loaded Config: Environment: %s, MaxWorkers: %d", cfg.Environment, cfg.MaxWorkers)
 	return cfg
 }

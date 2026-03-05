@@ -12,6 +12,7 @@ import (
 
 	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/encryptor"
 	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/logger"
+	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/oauth"
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/api"
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/config"
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/db"
@@ -36,6 +37,11 @@ func main() {
 		appLogger.Error("encryption init failed", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+	stateCodec, err := oauth.NewStateCodec([]byte(cfg.EncryptionKey))
+	if err != nil {
+		appLogger.Error("state codec init failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
 	pool, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		appLogger.Error("database connection failed", slog.String("error", err.Error()))
@@ -44,10 +50,34 @@ func main() {
 	defer pool.Close()
 	appLogger.Info("database connected")
 
+	providers := make(map[string]oauth.Provider)
+
+	if cfg.GoogleOAuth != nil {
+		providers[oauth.ProviderGoogle] = oauth.NewGoogleProvider(oauth.ProviderConfig{
+			ClientID:     cfg.GoogleOAuth.ClientID,
+			ClientSecret: cfg.GoogleOAuth.ClientSecret,
+			RedirectURL:  cfg.GoogleOAuth.RedirectURL,
+		})
+		appLogger.Info("OAuth provider registered", slog.String("provider", "google"))
+	}
+
+	if cfg.MicrosoftOAuth != nil {
+		providers[oauth.ProviderMicrosoft] = oauth.NewMicrosoftProvider(oauth.ProviderConfig{
+			ClientID:     cfg.MicrosoftOAuth.ClientID,
+			ClientSecret: cfg.MicrosoftOAuth.ClientSecret,
+			RedirectURL:  cfg.MicrosoftOAuth.RedirectURL,
+		})
+		appLogger.Info("OAuth provider registered", slog.String("provider", "microsoft"))
+	}
+
+	appLogger.Info("OAuth providers loaded", slog.Int("count", len(providers)))
+
 	relayStore := store.NewRelayStore(pool)
 	secretStore := store.NewSecretStore(pool, enc)
 	userStore := store.NewUserStore(pool)
-	handler := api.NewHandler(relayStore, secretStore, userStore, cfg.JWTSecret, appLogger)
+	connectionStore := store.NewConnectionStore(pool, enc)
+
+	handler := api.NewHandler(relayStore, secretStore, userStore, connectionStore, providers, stateCodec, cfg.JWTSecret, appLogger)
 	router := api.NewRouter(handler, cfg.JWTSecret)
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

@@ -10,6 +10,7 @@ import (
 
 	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/encryptor"
 	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/logger"
+	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/oauth"
 	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/config"
 	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/engine"
 	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/integrations/debug"
@@ -48,6 +49,26 @@ func main() {
 	}
 	appLogger.Info("database connected")
 
+	providers := make(map[string]oauth.Provider)
+
+	if cfg.GoogleOAuth != nil {
+		providers[oauth.ProviderGoogle] = oauth.NewGoogleProvider(oauth.ProviderConfig{
+			ClientID:     cfg.GoogleOAuth.ClientID,
+			ClientSecret: cfg.GoogleOAuth.ClientSecret,
+			RedirectURL:  cfg.GoogleOAuth.RedirectURL,
+		})
+		appLogger.Info("OAuth provider registered", slog.String("provider", "google"))
+	}
+
+	if cfg.MicrosoftOAuth != nil {
+		providers[oauth.ProviderMicrosoft] = oauth.NewMicrosoftProvider(oauth.ProviderConfig{
+			ClientID:     cfg.MicrosoftOAuth.ClientID,
+			ClientSecret: cfg.MicrosoftOAuth.ClientSecret,
+			RedirectURL:  cfg.MicrosoftOAuth.RedirectURL,
+		})
+		appLogger.Info("OAuth provider registered", slog.String("provider", "microsoft"))
+	}
+
 	//Registry Pattern
 	// Registering integrations instead of hardcoding
 	reg := engine.NewRegistry()
@@ -55,7 +76,7 @@ func main() {
 	reg.Register("discord_send", discord.New())
 	reg.Register("slack_send", slack.New())
 	reg.Register("http_request", httpreq.New())
-	reg.Register("email_send", email.New())
+	reg.Register("email_send", email.New(providers, db))
 	appLogger.Info("integrations loaded",
 		slog.Int("count", reg.Count()),
 		slog.Any("types", reg.Types()),

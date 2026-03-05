@@ -1,41 +1,40 @@
 package email
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
+	"strings"
 	"time"
+
+	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/oauth"
 )
 
-const resendURL = "https://api.resend.com/emails"
-
-type Sender struct {
-	client *http.Client
+type ConnectionResolver interface {
+	GetConnection(ctx context.Context, connectionID string) (provider, accessToken, refreshToken, accountEmail string, expiry time.Time, err error)
+	UpdateConnectionTokens(ctx context.Context, connectionID, accessToken, refreshToken string, expiry time.Time) error
 }
 
-func New() *Sender {
+type Sender struct {
+	providers map[string]oauth.Provider
+	connStore ConnectionResolver
+}
+
+func New(providers map[string]oauth.Provider, connStore ConnectionResolver) *Sender {
 	return &Sender{
-		client: &http.Client{Timeout: 10 * time.Second},
+		providers: providers,
+		connStore: connStore,
 	}
 }
 
 func (s *Sender) Execute(ctx context.Context, cfg map[string]any, payload []byte) error {
-	apiKey, _ := cfg["api_key"].(string)
-	if apiKey == "" {
-		return fmt.Errorf("missing api_key in email_send config")
-	}
-	from, _ := cfg["from"].(string)
-	if from == "" {
-		return fmt.Errorf("missing from in email_send config")
+	connectionID, _ := cfg["connection_id"].(string)
+	if connectionID == "" {
+		return fmt.Errorf("email_send: missing connection_id")
 	}
 	to, _ := cfg["to"].(string)
 	if to == "" {
-		return fmt.Errorf("missing to in email_send config")
+		return fmt.Errorf("email_send: missing to")
 	}
-
 	subject, _ := cfg["subject"].(string)
 	if subject == "" {
 		subject = "Hermes Notification"
@@ -45,43 +44,36 @@ func (s *Sender) Execute(ctx context.Context, cfg map[string]any, payload []byte
 	if body == "" {
 		body = fmt.Sprintf("Payload received:\n%s", string(payload))
 	}
-	emailBody := map[string]string{
-		"from":    from,
-		"to":      to,
-		"subject": subject,
-		"text":    body,
-	}
-	bodyJSON, err := json.Marshal(emailBody)
+
+	providerName, accessToken, refreshToken, accountEmail, expiry, err := s.connStore.GetConnection(ctx, connectionID)
 	if err != nil {
-		return fmt.Errorf("marshal email body:  %w", err)
+		return fmt.Errorf("email_send: load connection: %w", err)
+	}
+	provider, ok := s.providers[providerName]
+	if !ok {
+		return fmt.Errorf("email_send: unsupported provider %q", providerName)
 	}
 
-	var lastErr error
-	for attempt := range 3 {
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, resendURL, bytes.NewBuffer(bodyJSON))
-		if reqErr != nil {
-			return fmt.Errorf("build request:  %w", reqErr)
+	if time.Now().After(expiry.Add(-1 * time.Minute)) {
+		refreshed, refreshErr := provider.Refresh(ctx, refreshToken)
+		if refreshErr != nil {
+			return fmt.Errorf("email_send: token refresh failed: %w", refreshErr)
 		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-
-		resp, doErr := s.client.Do(req)
-		if doErr != nil {
-			lastErr = doErr
-			time.Sleep(time.Duration(300*(attempt+1)) * time.Millisecond)
-			continue
+		accessToken = refreshed.AccessToken
+		if updateErr := s.connStore.UpdateConnectionTokens(ctx, connectionID, refreshed.AccessToken, refreshed.RefreshToken, refreshed.Expiry); updateErr != nil {
+			_ = updateErr
 		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return nil
-		}
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			lastErr = fmt.Errorf("resend returned %d", resp.StatusCode)
-			time.Sleep(time.Duration(300*(attempt+1)) * time.Millisecond)
-			continue
-		}
-		return fmt.Errorf("resend returned non-retryable status %d", resp.StatusCode)
 	}
-	return fmt.Errorf("email_send failed after retries: %w", lastErr)
+
+	recipients := strings.SplitSeq(to, "")
+	for recipient := range recipients {
+		recipient = strings.TrimSpace(recipient)
+		if recipient == "" {
+			continue
+		}
+		if err := provider.SendEmail(ctx, accessToken, accountEmail, recipient, subject, body); err != nil {
+			return fmt.Errorf("email_send to %q:%w", recipient, err)
+		}
+	}
+	return nil
 }

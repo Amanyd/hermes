@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"log/slog"
+	"time"
 
+	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/oauth"
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/models"
 )
 
@@ -27,15 +29,43 @@ type UserStorer interface {
 	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
 }
 
-type Handler struct {
-	store       RelayStorer
-	secretStore SecretStorer
-	userStore   UserStorer
-	logger      *slog.Logger
-	baseURL     string
-	jwtSecret   string
+type ConnectionStorer interface {
+	Upsert(ctx context.Context, userID, provider, accountEmail, accessToken, refreshToken, scopes string, expiry time.Time) (*models.Connection, error)
+	ListByUser(ctx context.Context, userID string) ([]models.Connection, error)
+	Delete(ctx context.Context, userID, connectionID string) error
 }
 
-func NewHandler(s RelayStorer, ss SecretStorer, us UserStorer, jwtSecret string, logger *slog.Logger) *Handler {
-	return &Handler{store: s, secretStore: ss, userStore: us, jwtSecret: jwtSecret, logger: logger, baseURL: "http://localhost:8080"}
+type Handler struct {
+	store           RelayStorer
+	secretStore     SecretStorer
+	userStore       UserStorer
+	connectionStore ConnectionStorer
+	oauthProviders  map[string]oauth.Provider
+	stateCodec      *oauth.StateCodec
+	logger          *slog.Logger
+	baseURL         string
+	jwtSecret       string
+}
+
+func NewHandler(
+	s RelayStorer,
+	ss SecretStorer,
+	us UserStorer,
+	cs ConnectionStorer,
+	providers map[string]oauth.Provider,
+	stateCodec *oauth.StateCodec,
+	jwtSecret string,
+	logger *slog.Logger,
+) *Handler {
+	return &Handler{
+		store:           s,
+		secretStore:     ss,
+		userStore:       us,
+		connectionStore: cs,
+		oauthProviders:  providers,
+		stateCodec:      stateCodec,
+		jwtSecret:       jwtSecret,
+		logger:          logger,
+		baseURL:         "http://localhost:8080",
+	}
 }

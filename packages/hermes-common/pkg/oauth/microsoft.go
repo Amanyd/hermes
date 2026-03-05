@@ -1,7 +1,5 @@
 package oauth
 
-package oauth
-
 import (
 	"bytes"
 	"context"

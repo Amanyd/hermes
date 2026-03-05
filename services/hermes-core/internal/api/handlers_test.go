@@ -102,12 +102,32 @@ func (m *mockUserStore) GetUserByEmail(_ context.Context, _ string) (*models.Use
 	return m.getUserResult, m.getUserErr
 }
 
+type mockConnectionStore struct {
+	upsertResult *models.Connection
+	upsertErr    error
+	listResult   []models.Connection
+	listErr      error
+	deleteErr    error
+}
+
+func (m *mockConnectionStore) Upsert(_ context.Context, _, _, _, _, _, _ string, _ time.Time) (*models.Connection, error) {
+	return m.upsertResult, m.upsertErr
+}
+
+func (m *mockConnectionStore) ListByUser(_ context.Context, _ string) ([]models.Connection, error) {
+	return m.listResult, m.listErr
+}
+
+func (m *mockConnectionStore) Delete(_ context.Context, _, _ string) error {
+	return m.deleteErr
+}
+
 const testJWTsecret = "test-secret-key-for-jwt"
 
 // newTestHandler creates a Handler wired to the give mock stores
 func newTestHandler(rs *mockRelayStore, ss *mockSecretStore, us *mockUserStore) *Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewHandler(rs, ss, us, testJWTsecret, logger)
+	return NewHandler(rs, ss, us, &mockConnectionStore{}, nil, nil, testJWTsecret, logger)
 }
 
 // Creates a valid JWT for the given userID, simulating

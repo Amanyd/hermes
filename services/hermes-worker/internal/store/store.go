@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/encryptor"
 	"github.com/jackc/pgx/v5"
@@ -23,9 +24,10 @@ type Store struct {
 }
 
 var (
-	ErrRelayNotFound  = errors.New("relay not found")
-	ErrNoActions      = errors.New("no actions configured for relay")
-	ErrSecretNotFound = errors.New("secret not found")
+	ErrRelayNotFound      = errors.New("relay not found")
+	ErrNoActions          = errors.New("no actions configured for relay")
+	ErrSecretNotFound     = errors.New("secret not found")
+	ErrConnectionNotFound = errors.New("connection not found")
 )
 
 func NewStore(dbURL string, enc *encryptor.Encryptor) (*Store, error) {
@@ -132,4 +134,43 @@ func (s *Store) ResolveSecret(ctx context.Context, userID, secretName string) (s
 		return "", fmt.Errorf("decrypt secret %q: %w", secretName, err)
 	}
 	return plaintext, nil
+}
+
+func (s *Store) GetConnection(ctx context.Context, connectionID string) (provider, accessToken, refreshToken, accountEmail string, expiry time.Time, err error) {
+	var encAccess, encRefresh string
+	err = s.db.QueryRow(ctx, `SELECT provider, access_token, refresh_token, account_email, token_expiry FROM connections WHERE id = $1`,
+		connectionID).Scan(&provider, &encAccess, &encRefresh, &accountEmail, &expiry)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", "", "", time.Time{}, fmt.Errorf("%w: %s", ErrConnectionNotFound, connectionID)
+	}
+	if err != nil {
+		return "", "", "", "", time.Time{}, fmt.Errorf("query connection: %w", err)
+	}
+
+	accessToken, err = s.encryptor.Decrypt(encAccess)
+	if err != nil {
+		return "", "", "", "", time.Time{}, fmt.Errorf("decrypt access token: %w", err)
+	}
+	refreshToken, err = s.encryptor.Decrypt(encRefresh)
+	if err != nil {
+		return "", "", "", "", time.Time{}, fmt.Errorf("decrypt refresh token: %w", err)
+	}
+
+	return provider, accessToken, refreshToken, accountEmail, expiry, nil
+}
+
+func (s *Store) UpdateConnectionTokens(ctx context.Context, connectionID, accessToken, refreshToken string, expiry time.Time) error {
+	encAccess, err := s.encryptor.Encrypt(accessToken)
+	if err != nil {
+		return fmt.Errorf("encrypt access token: %w", err)
+	}
+	encRefresh, err := s.encryptor.Encrypt(refreshToken)
+	if err != nil {
+		return fmt.Errorf("encrypt refresh token: %w", err)
+	}
+
+	_, err = s.db.Exec(ctx,
+		`UPDATE connections SET access_token = $1, refresh_token = $2, token_expiry = $3, updated_at = NOW() WHERE id = $4`,
+		encAccess, encRefresh, expiry, connectionID)
+	return err
 }

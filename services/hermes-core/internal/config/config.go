@@ -7,6 +7,12 @@ import (
 	"strconv"
 )
 
+type OAuthProviderConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+}
+
 type Config struct {
 	Port          string
 	DatabaseURL   string
@@ -14,6 +20,9 @@ type Config struct {
 	Environment   string
 	EncryptionKey string
 	JWTSecret     string
+
+	GoogleOAuth    *OAuthProviderConfig
+	MicrosoftOAuth *OAuthProviderConfig
 }
 
 func getEnv(key, defaultValue string) string {
@@ -33,7 +42,7 @@ func LoadConfig() *Config {
 		dbURL = "postgres://user:password@localhost:5432/hermes"
 	}
 	log.Printf("Loaded Config: Port=%s", port)
-	return &Config{
+	cfg := &Config{
 		Port:          port,
 		DatabaseURL:   dbURL,
 		LogLevel:      getEnv("LOG_LEVEL", "INFO"),
@@ -41,6 +50,21 @@ func LoadConfig() *Config {
 		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
 		JWTSecret:     os.Getenv("JWT_SECRET"),
 	}
+	if id := os.Getenv("GOOGLE_CLIENT_ID"); id != "" {
+		cfg.GoogleOAuth = &OAuthProviderConfig{
+			ClientID:     id,
+			ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+			RedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:3000/api/v1/auth/callback/google"),
+		}
+	}
+	if id := os.Getenv("MICROSOFT_CLIENT_ID"); id != "" {
+		cfg.MicrosoftOAuth = &OAuthProviderConfig{
+			ClientID:     id,
+			ClientSecret: os.Getenv("MICROSOFT_CLIENT_SECRET"),
+			RedirectURL:  getEnv("MICROSOFT_REDIRECT_URL", "http://localhost:3000/api/v1/auth/callback/microsoft"),
+		}
+	}
+	return cfg
 }
 
 func (c *Config) Validate() error {

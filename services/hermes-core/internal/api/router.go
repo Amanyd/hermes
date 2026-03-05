@@ -29,6 +29,8 @@ func NewRouter(h *Handler, jwtSecret string) *chi.Mux {
 		r.Post("/auth/register", h.Register)
 		r.Post("/auth/login", h.Login)
 
+		r.Get("/auth/callback/{provider}", h.OAuthCallback)
+
 		// Protected routes
 		r.Group(func(r chi.Router) {
 			r.Use(JWTAuth(jwtSecret))
@@ -43,6 +45,11 @@ func NewRouter(h *Handler, jwtSecret string) *chi.Mux {
 			r.Post("/secrets", h.CreateSecret)
 			r.Get("/secrets", h.ListSecrets)
 			r.Delete("/secrets/{id}", h.DeleteSecret)
+
+			r.Get("/connections/providers", h.AvailableProviders)
+			r.Get("/connections", h.ListConnections)
+			r.Get("/connections/{provider}/connect", h.ConnectProvider)
+			r.Delete("/connections/{id}", h.DeleteConnection)
 		})
 	})
 	return r

@@ -7,8 +7,8 @@ CREATE TABLE IF NOT EXISTS connections (
     refresh_token TEXT NOT NULL,
     token_expiry TIMESTAMP NOT NULL,
     scopes TEXT NOT NULL DEFAULT '',
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE(user_id, provider, account_email)
 );
 
