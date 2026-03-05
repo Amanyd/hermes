@@ -118,7 +118,7 @@ func (wp *WorkerPool) process(ctx context.Context, job Job, logger *slog.Logger)
 			status = "failed"
 			details = err.Error()
 		}
-		logErr := wp.Store.LogExecution(logCtx, job.RelayID, status, details, job.EventID, job.Payload)
+		logErr := wp.Store.LogExecution(logCtx, job.RelayID, job.EventID, status, details, job.Payload)
 		if logErr != nil {
 			logger.Error("failed to save execution log", slog.String("error", logErr.Error()))
 		}

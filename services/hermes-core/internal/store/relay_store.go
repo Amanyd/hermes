@@ -221,7 +221,7 @@ func (s *RelayStore) UpdateRelay(ctx context.Context, relayID, userID string, re
 		args = append(args, *req.IsActive)
 		argIdx++
 	}
-	query += fmt.Sprintf(" WHERE id = $%d AND user_id = %d RETURNING id, user_id, name, description, webhook_path, is_active, created_at, updated_at", argIdx, argIdx+1)
+	query += fmt.Sprintf(" WHERE id = $%d AND user_id = $%d RETURNING id, user_id, name, description, webhook_path, is_active, created_at, updated_at", argIdx, argIdx+1)
 	args = append(args, relayID, userID)
 	var relay models.Relay
 	err := s.db.QueryRow(ctx, query, args...).Scan(
