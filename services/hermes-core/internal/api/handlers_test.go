@@ -33,6 +33,9 @@ type mockRelayStore struct {
 	updateRelayResult *models.Relay
 	updateRelayErr    error
 
+	updateRelayActionsResult *models.RelayWithActions
+	updateRelayActionsErr    error
+
 	deleteRelayErr error
 
 	getLogsResult []models.ExecutionLog
@@ -57,6 +60,10 @@ func (m *mockRelayStore) GetRelay(_ context.Context, _, _ string) (*models.Relay
 
 func (m *mockRelayStore) UpdateRelay(_ context.Context, _, _ string, _ models.UpdateRelayRequest) (*models.Relay, error) {
 	return m.updateRelayResult, m.updateRelayErr
+}
+
+func (m *mockRelayStore) UpdateRelayActions(_ context.Context, _, _ string, _ []models.CreateRelayActionInput) (*models.RelayWithActions, error) {
+	return m.updateRelayActionsResult, m.updateRelayActionsErr
 }
 
 func (m *mockRelayStore) DeleteRelay(_ context.Context, _, _ string) error {

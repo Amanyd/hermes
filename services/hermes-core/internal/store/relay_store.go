@@ -244,6 +244,72 @@ func (s *RelayStore) UpdateRelay(ctx context.Context, relayID, userID string, re
 	return &relay, nil
 }
 
+func (s *RelayStore) UpdateRelayActions(ctx context.Context, relayID, userID string, actionInputs []models.CreateRelayActionInput) (*models.RelayWithActions, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var relay models.Relay
+	err = tx.QueryRow(ctx,
+		`SELECT id, user_id, name, description, webhook_path, is_active, created_at, updated_at
+		 FROM relays WHERE id = $1 AND user_id = $2`, relayID, userID,
+	).Scan(&relay.ID, &relay.UserID, &relay.Name, &relay.Description,
+		&relay.WebhookPath, &relay.IsActive, &relay.CreatedAt, &relay.UpdatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, ErrRelayNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query relay: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `DELETE FROM relay_actions WHERE relay_id = $1`, relayID)
+	if err != nil {
+		return nil, fmt.Errorf("delete old actions: %w", err)
+	}
+
+	now := time.Now()
+	queryAction := `INSERT INTO relay_actions(id, relay_id, action_type, config, order_index, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		RETURNING id, relay_id, action_type, config, order_index, created_at, updated_at`
+
+	actions := make([]models.RelayAction, 0, len(actionInputs))
+	for _, actionReq := range actionInputs {
+		actionID := uuid.New().String()
+		configJSON, err := json.Marshal(actionReq.Config)
+		if err != nil {
+			return nil, fmt.Errorf("marshal action config: %w", err)
+		}
+		var action models.RelayAction
+		var configBytes []byte
+		err = tx.QueryRow(ctx, queryAction, actionID, relayID, actionReq.ActionType, configJSON, actionReq.OrderIndex, now, now).Scan(
+			&action.ID, &action.RelayID, &action.ActionType, &configBytes, &action.OrderIndex, &action.CreatedAt, &action.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("insert action: %w", err)
+		}
+		if err := json.Unmarshal(configBytes, &action.Config); err != nil {
+			return nil, fmt.Errorf("unmarshal action config: %w", err)
+		}
+		actions = append(actions, action)
+	}
+
+	_, err = tx.Exec(ctx, `UPDATE relays SET updated_at = $1 WHERE id = $2`, now, relayID)
+	if err != nil {
+		return nil, fmt.Errorf("update relay timestamp: %w", err)
+	}
+	relay.UpdatedAt = now
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return &models.RelayWithActions{
+		Relay:   relay,
+		Actions: actions,
+	}, nil
+}
+
 func (s *RelayStore) DeleteRelay(ctx context.Context, relayID, userID string) error {
 	query := `DELETE FROM relays WHERE id = $1 AND user_id= $2`
 	result, err := s.db.Exec(ctx, query, relayID, userID)

@@ -21,6 +21,10 @@ type UpdateRelayRequest struct {
 	IsActive    *bool   `json:"is_active,omitempty"`
 }
 
+type UpdateRelayActionsRequest struct {
+	Actions []CreateRelayActionInput `json:"actions"`
+}
+
 type Relay struct {
 	ID          string    `json:"id"`
 	UserID      string    `json:"user_id"`

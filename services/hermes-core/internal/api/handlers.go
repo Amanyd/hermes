@@ -219,6 +219,70 @@ func (h *Handler) UpdateRelay(w http.ResponseWriter, r *http.Request) {
 	h.respondSuccess(w, http.StatusOK, "Relay updated successfully", relay)
 }
 
+func (h *Handler) UpdateRelayActions(w http.ResponseWriter, r *http.Request) {
+	relayID := chi.URLParam(r, "id")
+	userID := GetUserID(r)
+
+	var req models.UpdateRelayActionsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Warn("invalid request body", slog.String("error", err.Error()))
+		h.respondError(w, http.StatusBadRequest, "Invalid JSON body", "INVALID_JSON")
+		return
+	}
+
+	if len(req.Actions) == 0 {
+		h.respondError(w, http.StatusBadRequest, "At least one action is required", "VALIDATION_ERROR")
+		return
+	}
+
+	for i, action := range req.Actions {
+		if action.ActionType == "" {
+			h.respondError(w, http.StatusBadRequest,
+				"Action type is required for action at index "+strconv.Itoa(i),
+				"VALIDATION_ERROR")
+			return
+		}
+		if !actions.IsValidType(action.ActionType) {
+			h.respondError(w, http.StatusBadRequest,
+				"Unknown action type '"+action.ActionType+"' at index "+strconv.Itoa(i),
+				"VALIDATION_ERROR")
+			return
+		}
+		if action.Config == nil {
+			h.respondError(w, http.StatusBadRequest,
+				"Config is required for action at index "+strconv.Itoa(i),
+				"VALIDATION_ERROR")
+			return
+		}
+		if err := actions.ValidateConfig(action.ActionType, action.Config); err != nil {
+			h.respondError(w, http.StatusBadRequest,
+				"Invalid config for action at index "+strconv.Itoa(i)+": "+err.Error(),
+				"VALIDATION_ERROR")
+			return
+		}
+	}
+
+	relay, err := h.store.UpdateRelayActions(r.Context(), relayID, userID, req.Actions)
+	if err != nil {
+		if errors.Is(err, store.ErrRelayNotFound) {
+			h.respondError(w, http.StatusNotFound, "Relay not found", "NOT_FOUND")
+			return
+		}
+		h.logger.Error("failed to update relay actions",
+			slog.String("relay_id", relayID),
+			slog.String("error", err.Error()))
+		h.respondError(w, http.StatusInternalServerError, "Failed to update actions", "DB_ERROR")
+		return
+	}
+	relay.Relay.WebhookURL = h.baseURL + relay.Relay.WebhookPath
+
+	h.logger.Info("relay actions updated",
+		slog.String("relay_id", relayID),
+		slog.Int("action_count", len(relay.Actions)))
+
+	h.respondSuccess(w, http.StatusOK, "Relay actions updated successfully", relay)
+}
+
 func (h *Handler) DeleteRelay(w http.ResponseWriter, r *http.Request) {
 	relayID := chi.URLParam(r, "id")
 	userID := GetUserID(r)
