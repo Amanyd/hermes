@@ -137,7 +137,7 @@ func (s *RelayStore) GetRelay(ctx context.Context, relayID, userID string) (*mod
 	`
 
 	var relay models.Relay
-	err := s.db.QueryRow(ctx, queryRelay, relayID).Scan(
+	err := s.db.QueryRow(ctx, queryRelay, relayID, userID).Scan(
 		&relay.ID,
 		&relay.UserID,
 		&relay.Name,
@@ -332,12 +332,12 @@ func (s *RelayStore) GetLogs(ctx context.Context, relayID, userID string, limit 
 	query := `
 		SELECT id, relay_id, status, payload, error_message, executed_at
 		FROM execution_logs
-		WHERE relay_id = $1 AND user_id = $2
+		WHERE relay_id = $1
 		ORDER BY executed_at DESC
-		LIMIT $3
+		LIMIT $2
 	`
 
-	rows, err := s.db.Query(ctx, query, relayID, userID, limit)
+	rows, err := s.db.Query(ctx, query, relayID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query logs: %w", err)
 	}
