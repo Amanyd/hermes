@@ -329,13 +329,12 @@ func (s *RelayStore) GetLogs(ctx context.Context, relayID, userID string, limit 
 		limit = 50
 	}
 
-	query := `
-		SELECT id, relay_id, status, payload, error_message, executed_at
-		FROM execution_logs
-		WHERE relay_id = $1
-		ORDER BY executed_at DESC
-		LIMIT $2
-	`
+	query := `SELECT el.id, el.relay_id, el.status, el.payload, el.error_message, el.executed_at
+		FROM execution_logs el
+		JOIN relays r ON r.id = el.relay_id
+		WHERE el.relay_id = $1 AND r.user_id = $2
+		ORDER BY el.executed_at DESC
+		LIMIT $3`
 
 	rows, err := s.db.Query(ctx, query, relayID, limit)
 	if err != nil {

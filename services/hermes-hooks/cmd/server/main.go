@@ -46,7 +46,7 @@ func main() {
 
 	go func() {
 		appLogger.Info("webhook server listening", slog.String("port", cfg.Port))
-		if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
+		if err := srv.ListenAndServe(); err != nil {
 			appLogger.Error("server failed", slog.String("error", err.Error()))
 			os.Exit(1)
 		}
