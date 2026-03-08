@@ -38,8 +38,11 @@ type mockRelayStore struct {
 
 	deleteRelayErr error
 
-	getLogsResult []models.ExecutionLog
-	getLogsErr    error
+	getExecutionsResult []models.Execution
+	getExecutionsErr    error
+
+	getExecutionStepsResult []models.ExecutionStep
+	getExecutionStepsErr    error
 }
 
 // RELAY TESTS
@@ -70,8 +73,12 @@ func (m *mockRelayStore) DeleteRelay(_ context.Context, _, _ string) error {
 	return m.deleteRelayErr
 }
 
-func (m *mockRelayStore) GetLogs(_ context.Context, _, _ string, _ int) ([]models.ExecutionLog, error) {
-	return m.getLogsResult, m.getLogsErr
+func (m *mockRelayStore) GetExecutions(_ context.Context, _, _ string, _ int) ([]models.Execution, error) {
+	return m.getExecutionsResult, m.getExecutionsErr
+}
+
+func (m *mockRelayStore) GetExecutionSteps(_ context.Context, _, _ string) ([]models.ExecutionStep, error) {
+	return m.getExecutionStepsResult, m.getExecutionStepsErr
 }
 
 type mockSecretStore struct {
@@ -514,6 +521,106 @@ func TestDeleteRelay_NotFound(t *testing.T) {
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestGetExecutions_Success(t *testing.T) {
+	now := time.Now()
+	rs := &mockRelayStore{
+		getExecutionsResult: []models.Execution{
+			{
+				ID:           "exec-1",
+				RelayID:      "relay-1",
+				EventID:      "event-1",
+				Status:       "success",
+				StartedAt:    now,
+				FinishedAt:   &now,
+				ErrorMessage: "",
+			},
+			{
+				ID:           "exec-2",
+				RelayID:      "relay-1",
+				Status:       "failed",
+				StartedAt:    now,
+				FinishedAt:   &now,
+				ErrorMessage: "step failed",
+			},
+		},
+	}
+	h := newTestHandler(rs, &mockSecretStore{}, &mockUserStore{})
+
+	r := chi.NewRouter()
+	r.Get("/api/v1/relays/{id}/executions", h.GetExecutions)
+
+	req := authedRequest(http.MethodGet, "/api/v1/relays/relay-1/executions?limit=50", nil, "user-1")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	resp := decodeResponse(t, rr)
+	if resp["success"] != true {
+		t.Errorf("expected success=true, got %v", resp["success"])
+	}
+
+	data, ok := resp["data"].([]any)
+	if !ok {
+		t.Fatalf("expected data to be an array, got %T", resp["data"])
+	}
+	if len(data) != 2 {
+		t.Fatalf("expected 2 executions, got %d", len(data))
+	}
+}
+
+func TestGetExecutionSteps_Success(t *testing.T) {
+	now := time.Now()
+	rs := &mockRelayStore{
+		getExecutionStepsResult: []models.ExecutionStep{
+			{
+				ID:          "step-1",
+				ExecutionID: "exec-1",
+				OrderIndex:  0,
+				ActionType:  "http_request",
+				Status:      "success",
+				Input: map[string]any{
+					"url":    "https://httpbin.org/get",
+					"method": "GET",
+				},
+				Output: map[string]any{
+					"status_code":  200,
+					"content_type": "application/json",
+				},
+				StartedAt:  now,
+				FinishedAt: &now,
+			},
+		},
+	}
+	h := newTestHandler(rs, &mockSecretStore{}, &mockUserStore{})
+
+	r := chi.NewRouter()
+	r.Get("/api/v1/executions/{executionId}/steps", h.GetExecutionSteps)
+
+	req := authedRequest(http.MethodGet, "/api/v1/executions/exec-1/steps", nil, "user-1")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	resp := decodeResponse(t, rr)
+	if resp["success"] != true {
+		t.Errorf("expected success=true, got %v", resp["success"])
+	}
+
+	data, ok := resp["data"].([]any)
+	if !ok {
+		t.Fatalf("expected data to be an array, got %T", resp["data"])
+	}
+	if len(data) != 1 {
+		t.Fatalf("expected 1 execution step, got %d", len(data))
 	}
 }
 

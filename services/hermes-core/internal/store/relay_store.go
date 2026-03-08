@@ -324,58 +324,128 @@ func (s *RelayStore) DeleteRelay(ctx context.Context, relayID, userID string) er
 	return nil
 }
 
-func (s *RelayStore) GetLogs(ctx context.Context, relayID, userID string, limit int) ([]models.ExecutionLog, error) {
+func (s *RelayStore) GetExecutions(ctx context.Context, relayID, userID string, limit int) ([]models.Execution, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 
-	query := `SELECT el.id, el.relay_id, el.status, el.payload, el.error_message, el.executed_at
-		FROM execution_logs el
-		JOIN relays r ON r.id = el.relay_id
-		WHERE el.relay_id = $1 AND r.user_id = $2
-		ORDER BY el.executed_at DESC
-		LIMIT $3`
+	query := `
+		SELECT e.id, e.relay_id, e.event_id, e.status, e.trigger_payload, e.error_message, e.started_at, e.finished_at
+		FROM executions e
+		JOIN relays r ON r.id = e.relay_id
+		WHERE e.relay_id = $1 AND r.user_id = $2
+		ORDER BY e.started_at DESC
+		LIMIT $3
+	`
 
-	rows, err := s.db.Query(ctx, query, relayID, limit)
+	rows, err := s.db.Query(ctx, query, relayID, userID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("query logs: %w", err)
+		return nil, fmt.Errorf("query executions: %w", err)
 	}
 	defer rows.Close()
 
-	logs := make([]models.ExecutionLog, 0)
+	executions := make([]models.Execution, 0)
 	for rows.Next() {
-		var l models.ExecutionLog
+		var ex models.Execution
 		var payloadBytes []byte
 		var errorMsg *string
+		var eventID *string
 
 		err := rows.Scan(
-			&l.ID,
-			&l.RelayID,
-			&l.Status,
+			&ex.ID,
+			&ex.RelayID,
+			&eventID,
+			&ex.Status,
 			&payloadBytes,
 			&errorMsg,
-			&l.ExecutedAt,
+			&ex.StartedAt,
+			&ex.FinishedAt,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("scan log: %w", err)
+			return nil, fmt.Errorf("scan execution: %w", err)
 		}
 
+		if eventID != nil {
+			ex.EventID = *eventID
+		}
 		if len(payloadBytes) > 0 {
-			if err := json.Unmarshal(payloadBytes, &l.Payload); err != nil {
-				return nil, fmt.Errorf("unmarshal payload: %w", err)
+			if err := json.Unmarshal(payloadBytes, &ex.TriggerPayload); err != nil {
+				return nil, fmt.Errorf("unmarshal execution payload: %w", err)
 			}
 		}
-
 		if errorMsg != nil {
-			l.ErrorMessage = *errorMsg
+			ex.ErrorMessage = *errorMsg
 		}
 
-		logs = append(logs, l)
+		executions = append(executions, ex)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows error: %w", err)
+		return nil, fmt.Errorf("executions rows error: %w", err)
 	}
 
-	return logs, nil
+	return executions, nil
+}
+
+func (s *RelayStore) GetExecutionSteps(ctx context.Context, executionID, userID string) ([]models.ExecutionStep, error) {
+	query := `
+		SELECT es.id, es.execution_id, es.order_index, es.action_type, es.status, es.input, es.output, es.error_message, es.started_at, es.finished_at
+		FROM execution_steps es
+		JOIN executions e ON e.id = es.execution_id
+		JOIN relays r ON r.id = e.relay_id
+		WHERE es.execution_id = $1 AND r.user_id = $2
+		ORDER BY es.order_index ASC
+	`
+
+	rows, err := s.db.Query(ctx, query, executionID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("query execution steps: %w", err)
+	}
+	defer rows.Close()
+
+	steps := make([]models.ExecutionStep, 0)
+	for rows.Next() {
+		var step models.ExecutionStep
+		var inputBytes []byte
+		var outputBytes []byte
+		var errorMsg *string
+
+		err := rows.Scan(
+			&step.ID,
+			&step.ExecutionID,
+			&step.OrderIndex,
+			&step.ActionType,
+			&step.Status,
+			&inputBytes,
+			&outputBytes,
+			&errorMsg,
+			&step.StartedAt,
+			&step.FinishedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan execution step: %w", err)
+		}
+
+		if len(inputBytes) > 0 {
+			if err := json.Unmarshal(inputBytes, &step.Input); err != nil {
+				return nil, fmt.Errorf("unmarshal execution step input: %w", err)
+			}
+		}
+		if len(outputBytes) > 0 {
+			if err := json.Unmarshal(outputBytes, &step.Output); err != nil {
+				return nil, fmt.Errorf("unmarshal execution step output: %w", err)
+			}
+		}
+		if errorMsg != nil {
+			step.ErrorMessage = *errorMsg
+		}
+
+		steps = append(steps, step)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("execution steps rows error: %w", err)
+	}
+
+	return steps, nil
 }

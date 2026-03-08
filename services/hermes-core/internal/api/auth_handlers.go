@@ -64,8 +64,17 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		slog.String("user_id", user.ID),
 		slog.String("username", user.Username),
 	)
+	signedToken, err := h.issueToken(user.ID)
+	if err != nil {
+		h.logger.Error("failed to generate JWT token", slog.String("error", err.Error()))
+		h.respondError(w, http.StatusInternalServerError, "Failed to login", "TOKEN_ERROR")
+		return
+	}
 
-	h.respondSuccess(w, http.StatusCreated, "User registered successfully", user)
+	h.respondSuccess(w, http.StatusCreated, "User registered successfully", models.AuthResponse{
+		Token: signedToken,
+		User:  *user,
+	})
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -103,14 +112,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims := jwt.RegisteredClaims{
-		Subject:   user.ID,
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(168 * time.Hour)),
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(h.jwtSecret))
-
+	signedToken, err := h.issueToken(user.ID)
 	if err != nil {
 		h.logger.Error("failed to generate JWT token", slog.String("error", err.Error()))
 		h.respondError(w, http.StatusInternalServerError, "Failed to login", "TOKEN_ERROR")
@@ -125,4 +127,14 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Token: signedToken,
 		User:  *user,
 	})
+}
+
+func (h *Handler) issueToken(userID string) (string, error) {
+	claims := jwt.RegisteredClaims{
+		Subject:   userID,
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(168 * time.Hour)),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(h.jwtSecret))
 }

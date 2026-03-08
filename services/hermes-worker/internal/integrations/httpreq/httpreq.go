@@ -21,6 +21,15 @@ var allowedMethods = map[string]bool{
 	http.MethodPatch:  true,
 }
 
+type HTTPRequestOutput struct {
+	StatusCode  int               `json:"status_code"`
+	ContentType string            `json:"content_type,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	BodyJSON    any               `json:"body_json,omitempty"`
+	BodyText    string            `json:"body_text,omitempty"`
+	DurationMS  int64             `json:"duration_ms,omitempty"`
+}
+
 type Executor struct {
 	client *http.Client
 }
@@ -36,6 +45,7 @@ func (e *Executor) Execute(ctx context.Context, cfg map[string]any, payload []by
 	if url == "" {
 		return nil, fmt.Errorf("missing url in http_request config")
 	}
+
 	method, _ := cfg["method"].(string)
 	method = strings.ToUpper(method)
 	if method == "" {
@@ -44,21 +54,24 @@ func (e *Executor) Execute(ctx context.Context, cfg map[string]any, payload []by
 	if !allowedMethods[method] {
 		return nil, fmt.Errorf("unsupported HTTP method: %s", method)
 	}
-	var body io.Reader
-	if method != http.MethodGet {
-		bodyTemplate, _ := cfg["body_template"].(string)
-		if bodyTemplate != "" {
-			body = strings.NewReader(bodyTemplate)
-		} else {
-			body = bytes.NewReader(payload)
-		}
-	}
+
 	var lastErr error
 	for attempt := range 3 {
+		var body io.Reader
+		if method != http.MethodGet {
+			bodyTemplate, _ := cfg["body_template"].(string)
+			if bodyTemplate != "" {
+				body = strings.NewReader(bodyTemplate)
+			} else {
+				body = bytes.NewReader(payload)
+			}
+		}
+
 		req, err := http.NewRequestWithContext(ctx, method, url, body)
 		if err != nil {
 			return nil, fmt.Errorf("build request: %w", err)
 		}
+
 		if method != http.MethodGet {
 			req.Header.Set("Content-Type", "application/json")
 		}
@@ -71,28 +84,74 @@ func (e *Executor) Execute(ctx context.Context, cfg map[string]any, payload []by
 			}
 		}
 
+		start := time.Now()
 		resp, doErr := e.client.Do(req)
+		duration := time.Since(start)
+
 		if doErr != nil {
 			lastErr = doErr
 			time.Sleep(time.Duration(300*(attempt+1)) * time.Millisecond)
 			continue
 		}
+
 		respBody, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			output, _ := json.Marshal(map[string]any{
-				"status_code": resp.StatusCode,
-				"body":        json.RawMessage(respBody),
-			})
-			return output, nil
+			output := HTTPRequestOutput{
+				StatusCode:  resp.StatusCode,
+				ContentType: resp.Header.Get("Content-Type"),
+				Headers:     flattenHeaders(resp.Header),
+				DurationMS:  duration.Milliseconds(),
+			}
+
+			if looksLikeJSON(output.ContentType, respBody) {
+				var parsed any
+				if err := json.Unmarshal(respBody, &parsed); err == nil {
+					output.BodyJSON = parsed
+				} else {
+					output.BodyText = string(respBody)
+				}
+			} else if len(respBody) > 0 {
+				output.BodyText = string(respBody)
+			}
+
+			encoded, err := json.Marshal(output)
+			if err != nil {
+				return nil, fmt.Errorf("marshal http_request output: %w", err)
+			}
+			return encoded, nil
 		}
+
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			lastErr = fmt.Errorf("http_request returned %d", resp.StatusCode)
-			time.Sleep(time.Duration(300*(attempt)+1) * time.Millisecond)
+			time.Sleep(time.Duration(300*(attempt+1)) * time.Millisecond)
 			continue
 		}
+
 		return nil, fmt.Errorf("http_request returned non-retryable status %d", resp.StatusCode)
 	}
+
 	return nil, fmt.Errorf("http_request failed after retries: %w", lastErr)
+}
+
+func flattenHeaders(headers http.Header) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+
+	out := make(map[string]string, len(headers))
+	for k, v := range headers {
+		out[k] = strings.Join(v, ", ")
+	}
+	return out
+}
+
+func looksLikeJSON(contentType string, body []byte) bool {
+	if strings.Contains(strings.ToLower(contentType), "application/json") {
+		return true
+	}
+
+	trimmed := bytes.TrimSpace(body)
+	return len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[')
 }

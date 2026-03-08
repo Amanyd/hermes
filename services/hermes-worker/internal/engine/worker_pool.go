@@ -98,9 +98,6 @@ func (wp *WorkerPool) worker(_ context.Context, id int) {
 
 // Executes the actual workflow logic
 func (wp *WorkerPool) process(ctx context.Context, job Job, logger *slog.Logger) (err error) {
-	status := "success"
-	details := "Relay executed successfully"
-
 	if job.EventID != "" {
 		isNew, dedupeErr := wp.Store.RegisterEvent(ctx, job.RelayID, job.EventID)
 		if dedupeErr != nil {
@@ -113,18 +110,28 @@ func (wp *WorkerPool) process(ctx context.Context, job Job, logger *slog.Logger)
 			return nil
 		}
 	}
+
+	executionID, createExecErr := wp.Store.CreateExecution(ctx, job.RelayID, job.EventID, job.Payload)
+	if createExecErr != nil {
+		return fmt.Errorf("create execution: %w", createExecErr)
+	}
+
 	defer func() {
 		logCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
+
+		status := "success"
+		details := ""
 		if err != nil {
 			status = "failed"
 			details = err.Error()
 		}
-		logErr := wp.Store.LogExecution(logCtx, job.RelayID, job.EventID, status, details, job.Payload)
-		if logErr != nil {
-			logger.Error("failed to save execution log", slog.String("error", logErr.Error()))
+
+		if completeErr := wp.Store.CompleteExecution(logCtx, executionID, status, details); completeErr != nil {
+			logger.Error("failed to complete execution", slog.String("error", completeErr.Error()))
 		}
 	}()
+
 	userID, ownerErr := wp.Store.GetRelayOwner(ctx, job.RelayID)
 	if ownerErr != nil {
 		return ownerErr
@@ -136,7 +143,6 @@ func (wp *WorkerPool) process(ctx context.Context, job Job, logger *slog.Logger)
 	}
 
 	outputs := make([]StepOutput, 0, len(actions))
-
 	teSteps := make([]templateengine.StepOutput, 0, len(actions))
 
 	for _, act := range actions {
@@ -145,31 +151,52 @@ func (wp *WorkerPool) process(ctx context.Context, job Job, logger *slog.Logger)
 			return fmt.Errorf("action %s (order %d) secret resolution failed: %w",
 				act.ActionType, act.OrderIndex, resolveErr)
 		}
+
 		resolved = templateengine.Resolve(resolved, job.Payload, teSteps)
+
+		stepID, stepCreateErr := wp.Store.CreateExecutionStep(ctx, executionID, act.OrderIndex, act.ActionType, resolved)
+		if stepCreateErr != nil {
+			return fmt.Errorf("create step for action %s (order %d): %w",
+				act.ActionType, act.OrderIndex, stepCreateErr)
+		}
+
 		logger.Debug("executing action",
 			slog.String("action_type", act.ActionType),
 			slog.Int("order_index", act.OrderIndex),
 			slog.String("event_id", job.EventID))
+
 		executor, pluginErr := wp.Registry.Get(act.ActionType)
 		if pluginErr != nil {
+			_ = wp.Store.CompleteExecutionStep(ctx, stepID, "failed", pluginErr.Error(), nil)
 			return pluginErr
 		}
+
 		output, execErr := executor.Execute(ctx, resolved, job.Payload, outputs)
 		if execErr != nil {
+			_ = wp.Store.CompleteExecutionStep(ctx, stepID, "failed", execErr.Error(), nil)
 			return fmt.Errorf("action %s (order %d) failed: %w", act.ActionType, act.OrderIndex, execErr)
 		}
+
+		if completeErr := wp.Store.CompleteExecutionStep(ctx, stepID, "success", "", output); completeErr != nil {
+			logger.Error("failed to complete execution step",
+				slog.String("step_id", stepID),
+				slog.String("error", completeErr.Error()))
+		}
+
 		stepOut := StepOutput{
 			ActionType: act.ActionType,
 			OrderIndex: act.OrderIndex,
 			Output:     output,
 		}
 		outputs = append(outputs, stepOut)
+
 		teSteps = append(teSteps, templateengine.StepOutput{
 			ActionType: act.ActionType,
 			OrderIndex: act.OrderIndex,
 			Output:     json.RawMessage(output),
 		})
 	}
+
 	return nil
 }
 

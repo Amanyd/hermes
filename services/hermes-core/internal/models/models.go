@@ -25,6 +25,31 @@ type UpdateRelayActionsRequest struct {
 	Actions []CreateRelayActionInput `json:"actions"`
 }
 
+type Execution struct {
+	ID             string          `json:"id"`
+	RelayID        string          `json:"relay_id"`
+	EventID        string          `json:"event_id,omitempty"`
+	Status         string          `json:"status"`
+	TriggerPayload map[string]any  `json:"trigger_payload,omitempty"`
+	ErrorMessage   string          `json:"error_message,omitempty"`
+	StartedAt      time.Time       `json:"started_at"`
+	FinishedAt     *time.Time      `json:"finished_at,omitempty"`
+	Steps          []ExecutionStep `json:"steps,omitempty"`
+}
+
+type ExecutionStep struct {
+	ID           string         `json:"id"`
+	ExecutionID  string         `json:"execution_id"`
+	OrderIndex   int            `json:"order_index"`
+	ActionType   string         `json:"action_type"`
+	Status       string         `json:"status"`
+	Input        map[string]any `json:"input,omitempty"`
+	Output       map[string]any `json:"output,omitempty"`
+	ErrorMessage string         `json:"error_message,omitempty"`
+	StartedAt    time.Time      `json:"started_at"`
+	FinishedAt   *time.Time     `json:"finished_at,omitempty"`
+}
+
 type Relay struct {
 	ID          string    `json:"id"`
 	UserID      string    `json:"user_id"`
@@ -50,15 +75,6 @@ type RelayAction struct {
 	OrderIndex int            `json:"order_index"`
 	CreatedAt  time.Time      `json:"created_at"`
 	UpdatedAt  time.Time      `json:"updated_at"`
-}
-
-type ExecutionLog struct {
-	ID           string         `json:"id"`
-	RelayID      string         `json:"relay_id"`
-	Status       string         `json:"status"`
-	Payload      map[string]any `json:"payload,omitempty"`
-	ErrorMessage string         `json:"error_message,omitempty"`
-	ExecutedAt   time.Time      `json:"executed_at"`
 }
 
 type Secret struct {

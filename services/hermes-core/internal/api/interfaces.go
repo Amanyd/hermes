@@ -16,7 +16,8 @@ type RelayStorer interface {
 	UpdateRelay(ctx context.Context, relayID, userID string, req models.UpdateRelayRequest) (*models.Relay, error)
 	UpdateRelayActions(ctx context.Context, relayID, userID string, actions []models.CreateRelayActionInput) (*models.RelayWithActions, error)
 	DeleteRelay(ctx context.Context, relayID, userID string) error
-	GetLogs(ctx context.Context, relayID, userID string, limit int) ([]models.ExecutionLog, error)
+	GetExecutions(ctx context.Context, relayID, userID string, limit int) ([]models.Execution, error)
+	GetExecutionSteps(ctx context.Context, executionID, userID string) ([]models.ExecutionStep, error)
 }
 
 type SecretStorer interface {

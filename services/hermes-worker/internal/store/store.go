@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/encryptor"
@@ -21,6 +22,14 @@ type RelayAction struct {
 type Store struct {
 	db        *pgxpool.Pool
 	encryptor *encryptor.Encryptor
+}
+
+type Execution struct {
+	ID string
+}
+
+type ExecutionStep struct {
+	ID string
 }
 
 var (
@@ -173,4 +182,92 @@ func (s *Store) UpdateConnectionTokens(ctx context.Context, connectionID, access
 		`UPDATE connections SET access_token = $1, refresh_token = $2, token_expiry = $3, updated_at = NOW() WHERE id = $4`,
 		encAccess, encRefresh, expiry, connectionID)
 	return err
+}
+
+func (s *Store) CreateExecution(ctx context.Context, relayID, eventID string, triggerPayload []byte) (string, error) {
+	query := `
+		INSERT INTO executions (relay_id, event_id, status, trigger_payload, started_at)
+		VALUES ($1, $2, $3, $4, NOW())
+		RETURNING id
+	`
+
+	var payloadJSON any
+	if len(triggerPayload) > 0 {
+		payloadJSON = json.RawMessage(triggerPayload)
+	}
+
+	var executionID string
+	err := s.db.QueryRow(ctx, query, relayID, eventID, "running", payloadJSON).Scan(&executionID)
+	if err != nil {
+		return "", fmt.Errorf("create execution: %w", err)
+	}
+	return executionID, nil
+}
+
+func (s *Store) CompleteExecution(ctx context.Context, executionID, status, errorMessage string) error {
+	query := `
+		UPDATE executions
+		SET status = $2,
+		    error_message = $3,
+		    finished_at = NOW()
+		WHERE id = $1
+	`
+	_, err := s.db.Exec(ctx, query, executionID, status, nullableString(errorMessage))
+	if err != nil {
+		return fmt.Errorf("complete execution: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) CreateExecutionStep(ctx context.Context, executionID string, orderIndex int, actionType string, input map[string]any) (string, error) {
+	query := `
+		INSERT INTO execution_steps (execution_id, order_index, action_type, status, input, started_at)
+		VALUES ($1, $2, $3, $4, $5, NOW())
+		RETURNING id
+	`
+
+	var inputJSON any
+	if input != nil {
+		b, err := json.Marshal(input)
+		if err != nil {
+			return "", fmt.Errorf("marshal step input: %w", err)
+		}
+		inputJSON = json.RawMessage(b)
+	}
+
+	var stepID string
+	err := s.db.QueryRow(ctx, query, executionID, orderIndex, actionType, "running", inputJSON).Scan(&stepID)
+	if err != nil {
+		return "", fmt.Errorf("create execution step: %w", err)
+	}
+	return stepID, nil
+}
+
+func (s *Store) CompleteExecutionStep(ctx context.Context, stepID, status, errorMessage string, output []byte) error {
+	query := `
+		UPDATE execution_steps
+		SET status = $2,
+		    output = $3,
+		    error_message = $4,
+		    finished_at = NOW()
+		WHERE id = $1
+	`
+
+	var outputJSON any
+	if len(output) > 0 {
+		outputJSON = json.RawMessage(output)
+	}
+
+	_, err := s.db.Exec(ctx, query, stepID, status, outputJSON, nullableString(errorMessage))
+	if err != nil {
+		return fmt.Errorf("complete execution step: %w", err)
+	}
+	return nil
+}
+
+func nullableString(s string) any {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return s
 }

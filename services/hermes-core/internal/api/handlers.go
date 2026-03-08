@@ -140,26 +140,52 @@ func (h *Handler) GetAllRelays(w http.ResponseWriter, r *http.Request) {
 	h.respondSuccess(w, http.StatusOK, "", relays)
 }
 
-func (h *Handler) GetRelayLogs(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetExecutions(w http.ResponseWriter, r *http.Request) {
 	relayID := chi.URLParam(r, "id")
 	userID := GetUserID(r)
+
 	limit := 50
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
 			limit = min(parsedLimit, 200)
 		}
 	}
-	h.logger.Debug("fetching relay logs", slog.String("relay_id", relayID),
-		slog.Int("limit", limit))
-	logs, err := h.store.GetLogs(r.Context(), relayID, userID, limit)
+
+	h.logger.Debug("fetching executions",
+		slog.String("relay_id", relayID),
+		slog.Int("limit", limit),
+	)
+
+	executions, err := h.store.GetExecutions(r.Context(), relayID, userID, limit)
 	if err != nil {
-		h.logger.Error("failed to fetch logs", slog.String("relay_id", relayID),
+		h.logger.Error("failed to fetch executions",
+			slog.String("relay_id", relayID),
 			slog.String("error", err.Error()))
-		h.respondError(w, http.StatusInternalServerError, "Failed to fetch logs", "DB_ERROR")
+		h.respondError(w, http.StatusInternalServerError, "Failed to fetch executions", "DB_ERROR")
 		return
 	}
-	h.logger.Info("fetched logs", slog.String("relay_id", relayID), slog.Int("count", len(logs)))
-	h.respondSuccess(w, http.StatusOK, "", logs)
+
+	h.respondSuccess(w, http.StatusOK, "", executions)
+}
+
+func (h *Handler) GetExecutionSteps(w http.ResponseWriter, r *http.Request) {
+	executionID := chi.URLParam(r, "executionId")
+	userID := GetUserID(r)
+
+	h.logger.Debug("fetching execution steps",
+		slog.String("execution_id", executionID),
+	)
+
+	steps, err := h.store.GetExecutionSteps(r.Context(), executionID, userID)
+	if err != nil {
+		h.logger.Error("failed to fetch execution steps",
+			slog.String("execution_id", executionID),
+			slog.String("error", err.Error()))
+		h.respondError(w, http.StatusInternalServerError, "Failed to fetch execution steps", "DB_ERROR")
+		return
+	}
+
+	h.respondSuccess(w, http.StatusOK, "", steps)
 }
 
 func (h *Handler) GetRelay(w http.ResponseWriter, r *http.Request) {

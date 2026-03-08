@@ -1,97 +1,122 @@
 export interface Relay {
-  id: string
-  user_id: string
-  name: string
-  description: string
-  webhook_path: string
-  webhook_url: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
+  id: string;
+  user_id: string;
+  name: string;
+  description: string;
+  webhook_path: string;
+  webhook_url: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface RelayAction {
-  id: string
-  relay_id: string
-  action_type: string
-  config: Record<string, unknown>
-  order_index: number
-  created_at: string
-  updated_at: string
+  id: string;
+  relay_id: string;
+  action_type: string;
+  config: Record<string, unknown>;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface RelayWithActions extends Relay {
-  actions: RelayAction[]
+  actions: RelayAction[];
 }
 
-export interface ExecutionLog {
-  id: string
-  relay_id: string
-  status: 'success' | 'failed'
-  payload?: Record<string, unknown>
-  error_message?: string
-  executed_at: string
+export interface HTTPRequestStepOutput {
+  status_code: number;
+  content_type?: string;
+  headers?: Record<string, string>;
+  body_json?: unknown;
+  body_text?: string;
+  duration_ms?: number;
+}
+
+export interface Execution {
+  id: string;
+  relay_id: string;
+  event_id?: string;
+  status: "running" | "success" | "failed";
+  trigger_payload?: Record<string, unknown>;
+  error_message?: string;
+  started_at: string;
+  finished_at?: string;
+  steps?: ExecutionStep[];
+}
+
+export interface ExecutionStep {
+  id: string;
+  execution_id: string;
+  order_index: number;
+  action_type: string;
+  status: "running" | "success" | "failed";
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  error_message?: string;
+  started_at: string;
+  finished_at?: string;
 }
 
 export interface Secret {
-  id: string
-  user_id: string
-  name: string
-  created_at: string
-  updated_at: string
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CreateRelayActionInput {
-  action_type: string
-  config: Record<string, unknown>
-  order_index: number
+  action_type: string;
+  config: Record<string, unknown>;
+  order_index: number;
 }
 
 export interface CreateRelayRequest {
-  name: string
-  description?: string
-  actions: CreateRelayActionInput[]
+  name: string;
+  description?: string;
+  actions: CreateRelayActionInput[];
 }
 
 export interface UpdateRelayRequest {
-  name?: string
-  description?: string
-  is_active?: boolean
+  name?: string;
+  description?: string;
+  is_active?: boolean;
 }
 
 export interface CreateSecretRequest {
-  name: string
-  value: string
+  name: string;
+  value: string;
 }
 
 export interface Connection {
-  id: string
-  user_id: string
-  provider: 'google' | 'microsoft'
-  account_email: string
-  scopes: string
-  created_at: string
-  updated_at: string
+  id: string;
+  user_id: string;
+  provider: "google" | "microsoft";
+  account_email: string;
+  scopes: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface UpdateRelayActionsRequest {
-  actions: CreateRelayActionInput[]
+  actions: CreateRelayActionInput[];
 }
 
 export const ACTION_TYPES = [
-  'discord_send',
-  'slack_send',
-  'http_request',
-  'email_send',
-  'debug_log',
-] as const
+  "discord_send",
+  "slack_send",
+  "http_request",
+  "email_send",
+  "debug_log",
+] as const;
 
-export type ActionType = (typeof ACTION_TYPES)[number]
+export type ActionType = (typeof ACTION_TYPES)[number];
 
 export const ACTION_LABELS: Record<ActionType, string> = {
-  discord_send: 'Discord',
-  slack_send: 'Slack',
-  http_request: 'HTTP Request',
-  email_send: 'Email',
-  debug_log: 'Debug Log',
-}
+  discord_send: "Discord",
+  slack_send: "Slack",
+  http_request: "HTTP Request",
+  email_send: "Email",
+  debug_log: "Debug Log",
+};
