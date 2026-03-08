@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createRelay,
   createSecret,
+  deleteExecution,
   deleteConnection,
   deleteRelay,
   deleteSecret,
@@ -158,6 +159,16 @@ export function useTriggerRelay(id: string) {
     mutationFn: (payload: Record<string, unknown>) => triggerRelay(id, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.relayExecutions(id) });
+    },
+  });
+}
+
+export function useDeleteExecution(relayId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (executionId: string) => deleteExecution(executionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.relayExecutions(relayId) });
     },
   });
 }

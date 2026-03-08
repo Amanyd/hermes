@@ -51,6 +51,7 @@ func NewRouter(h *Handler, jwtSecret string) *chi.Mux {
 			r.Delete("/relays/{id}", h.DeleteRelay)
 			r.Get("/relays/{id}/executions", h.GetExecutions)
 			r.Get("/executions/{executionId}/steps", h.GetExecutionSteps)
+			r.Delete("/executions/{executionId}", h.DeleteExecution)
 			r.Post("/relays/{id}/trigger", h.TriggerRelay)
 
 			r.Post("/secrets", h.CreateSecret)

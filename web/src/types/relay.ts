@@ -86,6 +86,8 @@ export interface UpdateRelayRequest {
   name?: string;
   description?: string;
   is_active?: boolean;
+  trigger_type?: TriggerType;
+  trigger_config?: Record<string, unknown>;
 }
 
 export interface CreateSecretRequest {

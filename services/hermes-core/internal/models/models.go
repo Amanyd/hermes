@@ -26,9 +26,11 @@ type CreateRelayActionInput struct {
 }
 
 type UpdateRelayRequest struct {
-	Name        *string `json:"name,omitempty"`
-	Description *string `json:"description,omitempty"`
-	IsActive    *bool   `json:"is_active,omitempty"`
+	Name          *string        `json:"name,omitempty"`
+	Description   *string        `json:"description,omitempty"`
+	IsActive      *bool          `json:"is_active,omitempty"`
+	TriggerType   *TriggerType   `json:"trigger_type,omitempty"`
+	TriggerConfig map[string]any `json:"trigger_config,omitempty"`
 }
 
 type UpdateRelayActionsRequest struct {

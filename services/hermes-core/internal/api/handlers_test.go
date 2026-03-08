@@ -36,7 +36,8 @@ type mockRelayStore struct {
 	updateRelayActionsResult *models.RelayWithActions
 	updateRelayActionsErr    error
 
-	deleteRelayErr error
+	deleteRelayErr     error
+	deleteExecutionErr error
 
 	getExecutionsResult []models.Execution
 	getExecutionsErr    error
@@ -79,6 +80,10 @@ func (m *mockRelayStore) GetExecutions(_ context.Context, _, _ string, _ int) ([
 
 func (m *mockRelayStore) GetExecutionSteps(_ context.Context, _, _ string) ([]models.ExecutionStep, error) {
 	return m.getExecutionStepsResult, m.getExecutionStepsErr
+}
+
+func (m *mockRelayStore) DeleteExecution(_ context.Context, _, _ string) error {
+	return m.deleteExecutionErr
 }
 
 type mockSecretStore struct {

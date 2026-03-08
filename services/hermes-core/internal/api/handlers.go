@@ -203,6 +203,25 @@ func (h *Handler) GetExecutionSteps(w http.ResponseWriter, r *http.Request) {
 	h.respondSuccess(w, http.StatusOK, "", steps)
 }
 
+func (h *Handler) DeleteExecution(w http.ResponseWriter, r *http.Request) {
+	executionID := chi.URLParam(r, "executionId")
+	userID := GetUserID(r)
+
+	err := h.store.DeleteExecution(r.Context(), executionID, userID)
+	if err != nil {
+		if errors.Is(err, store.ErrExecutionNotFound) {
+			h.respondError(w, http.StatusNotFound, "Execution not found", "NOT_FOUND")
+			return
+		}
+		h.logger.Error("failed to delete execution",
+			slog.String("execution_id", executionID),
+			slog.String("error", err.Error()))
+		h.respondError(w, http.StatusInternalServerError, "Failed to delete execution", "DB_ERROR")
+		return
+	}
+	h.respondSuccess(w, http.StatusOK, "Execution deleted", map[string]string{"deleted_id": executionID})
+}
+
 func (h *Handler) GetRelay(w http.ResponseWriter, r *http.Request) {
 	relayID := chi.URLParam(r, "id")
 	userID := GetUserID(r)
@@ -239,10 +258,28 @@ func (h *Handler) UpdateRelay(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "Invalid JSON body", "INVALID_JSON")
 		return
 	}
-	if req.Name == nil && req.Description == nil && req.IsActive == nil {
+	if req.Name == nil && req.Description == nil && req.IsActive == nil && req.TriggerType == nil {
 		h.respondError(w, http.StatusBadRequest, "No fields to update", "VALIDATION_ERROR")
 		return
 	}
+
+	if req.TriggerType != nil {
+		switch *req.TriggerType {
+		case models.TriggerWebhook, models.TriggerManual:
+		case models.TriggerCron:
+			schedule, _ := req.TriggerConfig["schedule"].(string)
+			if schedule == "" {
+				h.respondError(w, http.StatusBadRequest,
+					"trigger_config.schedule is required for cron triggers", "VALIDATION_ERROR")
+				return
+			}
+		default:
+			h.respondError(w, http.StatusBadRequest,
+				"unknown trigger_type: "+string(*req.TriggerType), "VALIDATION_ERROR")
+			return
+		}
+	}
+
 	relay, err := h.store.UpdateRelay(r.Context(), relayID, userID, req)
 	if err != nil {
 		if errors.Is(err, store.ErrRelayNotFound) {

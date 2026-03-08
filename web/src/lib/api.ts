@@ -36,12 +36,15 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
       ...init?.headers,
     },
   });
-
-  const json = await res.json();
+  const contentType = res.headers.get("content-type") ?? "";
+  const hasBody = contentType.includes("application/json");
+  const json = hasBody ? await res.json() : null;
 
   if (!res.ok) {
-    const err = json as APIError;
-    throw new Error(err.error ?? "Something went wrong");
+    throw new Error(
+      (json as APIError | null)?.error ??
+        `Request failed: ${res.status} ${res.statusText}`,
+    );
   }
 
   return json as T;
@@ -182,4 +185,8 @@ export async function updateRelayActions(
     },
   );
   return res.data!;
+}
+
+export async function deleteExecution(executionId: string): Promise<void> {
+  await apiFetch(`/executions/${executionId}`, { method: "DELETE" });
 }

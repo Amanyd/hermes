@@ -87,7 +87,7 @@ func (h *Handler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Store the connection (upsert: reconnecting updates the tokens).
-	conn, err := h.connectionStore.Upsert(r.Context(), userID, providerName, tokens.Email,
+	_, err = h.connectionStore.Upsert(r.Context(), userID, providerName, tokens.Email,
 		tokens.AccessToken, tokens.RefreshToken, "", tokens.Expiry)
 	if err != nil {
 		h.logger.Error("failed to store connection", slog.String("error", err.Error()))

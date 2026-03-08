@@ -19,6 +19,7 @@ type RelayStore struct {
 }
 
 var ErrRelayNotFound = errors.New("relay not found")
+var ErrExecutionNotFound = errors.New("execution not found")
 
 func NewRelayStore(db *pgxpool.Pool) *RelayStore {
 	return &RelayStore{db: db}
@@ -122,10 +123,11 @@ func (s *RelayStore) CreateRelay(ctx context.Context, req models.CreateRelayRequ
 }
 
 func (s *RelayStore) GetAllRelays(ctx context.Context, userID string) ([]models.Relay, error) {
-	query := `SELECT id,user_id,name,description,webhook_path, is_active, created_at, updated_at
-	FROM relays
-	WHERE user_id = $1::uuid
-	ORDER BY created_at DESC`
+	query := `SELECT id, user_id, name, description, webhook_path, is_active,
+	                 trigger_type, trigger_config, created_at, updated_at
+	          FROM relays
+	          WHERE user_id = $1::uuid
+	          ORDER BY created_at DESC`
 
 	rows, err := s.db.Query(ctx, query, userID)
 	if err != nil {
@@ -134,6 +136,8 @@ func (s *RelayStore) GetAllRelays(ctx context.Context, userID string) ([]models.
 	defer rows.Close()
 	relays := make([]models.Relay, 0)
 	for rows.Next() {
+		var triggerTypeStr string
+		var triggerConfigBytes []byte
 		var relay models.Relay
 		err := rows.Scan(
 			&relay.ID,
@@ -142,11 +146,19 @@ func (s *RelayStore) GetAllRelays(ctx context.Context, userID string) ([]models.
 			&relay.Description,
 			&relay.WebhookPath,
 			&relay.IsActive,
+			&triggerTypeStr,
+			&triggerConfigBytes,
 			&relay.CreatedAt,
 			&relay.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan relay: %w", err)
+		}
+		relay.TriggerType = models.TriggerType(triggerTypeStr)
+		if len(triggerConfigBytes) > 0 {
+			if err := json.Unmarshal(triggerConfigBytes, &relay.TriggerConfig); err != nil {
+				return nil, fmt.Errorf("unmarshal trigger_config: %w", err)
+			}
 		}
 		relays = append(relays, relay)
 	}
@@ -158,12 +170,14 @@ func (s *RelayStore) GetAllRelays(ctx context.Context, userID string) ([]models.
 
 func (s *RelayStore) GetRelay(ctx context.Context, relayID, userID string) (*models.RelayWithActions, error) {
 	queryRelay := `
-		SELECT id, user_id, name, description, webhook_path, is_active, created_at, updated_at
+		SELECT id, user_id, name, description, webhook_path, is_active,
+		       trigger_type, trigger_config, created_at, updated_at
 		FROM relays
-		WHERE id = $1 AND user_id=$2
+		WHERE id = $1 AND user_id = $2
 	`
-
 	var relay models.Relay
+	var triggerTypeStr string
+	var triggerConfigBytes []byte
 	err := s.db.QueryRow(ctx, queryRelay, relayID, userID).Scan(
 		&relay.ID,
 		&relay.UserID,
@@ -171,6 +185,8 @@ func (s *RelayStore) GetRelay(ctx context.Context, relayID, userID string) (*mod
 		&relay.Description,
 		&relay.WebhookPath,
 		&relay.IsActive,
+		&triggerTypeStr,
+		&triggerConfigBytes,
 		&relay.CreatedAt,
 		&relay.UpdatedAt,
 	)
@@ -179,6 +195,12 @@ func (s *RelayStore) GetRelay(ctx context.Context, relayID, userID string) (*mod
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query relay: %w", err)
+	}
+	relay.TriggerType = models.TriggerType(triggerTypeStr)
+	if len(triggerConfigBytes) > 0 {
+		if err := json.Unmarshal(triggerConfigBytes, &relay.TriggerConfig); err != nil {
+			return nil, fmt.Errorf("unmarshal trigger_config: %w", err)
+		}
 	}
 
 	queryActions := `
@@ -229,8 +251,9 @@ func (s *RelayStore) GetRelay(ctx context.Context, relayID, userID string) (*mod
 }
 
 func (s *RelayStore) UpdateRelay(ctx context.Context, relayID, userID string, req models.UpdateRelayRequest) (*models.Relay, error) {
+	now := time.Now()
 	query := `UPDATE relays SET updated_at = $1`
-	args := []any{time.Now()}
+	args := []any{now}
 	argIdx := 2
 
 	if req.Name != nil {
@@ -239,7 +262,7 @@ func (s *RelayStore) UpdateRelay(ctx context.Context, relayID, userID string, re
 		argIdx++
 	}
 	if req.Description != nil {
-		query += fmt.Sprintf(",description=$%d", argIdx)
+		query += fmt.Sprintf(", description=$%d", argIdx)
 		args = append(args, *req.Description)
 		argIdx++
 	}
@@ -248,9 +271,48 @@ func (s *RelayStore) UpdateRelay(ctx context.Context, relayID, userID string, re
 		args = append(args, *req.IsActive)
 		argIdx++
 	}
-	query += fmt.Sprintf(" WHERE id = $%d AND user_id = $%d RETURNING id, user_id, name, description, webhook_path, is_active, created_at, updated_at", argIdx, argIdx+1)
+	if req.TriggerType != nil {
+		query += fmt.Sprintf(", trigger_type=$%d", argIdx)
+		args = append(args, string(*req.TriggerType))
+		argIdx++
+
+		triggerConfig := req.TriggerConfig
+		if triggerConfig == nil {
+			triggerConfig = map[string]any{}
+		}
+		configJSON, err := json.Marshal(triggerConfig)
+		if err != nil {
+			return nil, fmt.Errorf("marshal trigger_config: %w", err)
+		}
+		query += fmt.Sprintf(", trigger_config=$%d", argIdx)
+		args = append(args, configJSON)
+		argIdx++
+
+		if *req.TriggerType == models.TriggerCron {
+			schedule, _ := triggerConfig["schedule"].(string)
+			next, err := computeNextRun(schedule, now)
+			if err != nil {
+				return nil, fmt.Errorf("invalid cron schedule: %w", err)
+			}
+			query += fmt.Sprintf(", next_run_at=$%d", argIdx)
+			args = append(args, next)
+			argIdx++
+		} else {
+			query += fmt.Sprintf(", next_run_at=$%d", argIdx)
+			args = append(args, nil)
+			argIdx++
+		}
+	}
+
+	query += fmt.Sprintf(
+		" WHERE id=$%d AND user_id=$%d RETURNING id, user_id, name, description, webhook_path, is_active, trigger_type, trigger_config, created_at, updated_at",
+		argIdx, argIdx+1,
+	)
 	args = append(args, relayID, userID)
+
 	var relay models.Relay
+	var triggerTypeStr string
+	var triggerConfigBytes []byte
 	err := s.db.QueryRow(ctx, query, args...).Scan(
 		&relay.ID,
 		&relay.UserID,
@@ -258,6 +320,8 @@ func (s *RelayStore) UpdateRelay(ctx context.Context, relayID, userID string, re
 		&relay.Description,
 		&relay.WebhookPath,
 		&relay.IsActive,
+		&triggerTypeStr,
+		&triggerConfigBytes,
 		&relay.CreatedAt,
 		&relay.UpdatedAt,
 	)
@@ -267,7 +331,12 @@ func (s *RelayStore) UpdateRelay(ctx context.Context, relayID, userID string, re
 	if err != nil {
 		return nil, fmt.Errorf("update relay: %w", err)
 	}
-
+	relay.TriggerType = models.TriggerType(triggerTypeStr)
+	if len(triggerConfigBytes) > 0 {
+		if err := json.Unmarshal(triggerConfigBytes, &relay.TriggerConfig); err != nil {
+			return nil, fmt.Errorf("unmarshal trigger_config: %w", err)
+		}
+	}
 	return &relay, nil
 }
 
@@ -475,6 +544,24 @@ func (s *RelayStore) GetExecutionSteps(ctx context.Context, executionID, userID 
 	}
 
 	return steps, nil
+}
+
+func (s *RelayStore) DeleteExecution(ctx context.Context, executionID, userID string) error {
+	query := `
+		DELETE FROM executions
+		USING relays
+		WHERE executions.id = $1
+		  AND executions.relay_id = relays.id
+		  AND relays.user_id = $2
+	`
+	result, err := s.db.Exec(ctx, query, executionID, userID)
+	if err != nil {
+		return fmt.Errorf("delete execution: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrExecutionNotFound
+	}
+	return nil
 }
 
 func computeNextRun(schedule string, from time.Time) (time.Time, error) {

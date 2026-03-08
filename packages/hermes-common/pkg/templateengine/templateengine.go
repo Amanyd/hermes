@@ -112,18 +112,47 @@ func drillJSON(raw []byte, path string) (string, error) {
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return "", fmt.Errorf("invalid JSON: %w", err)
 	}
+
 	segments := strings.Split(path, ".")
 	current := obj
 	for _, seg := range segments {
-		m, ok := current.(map[string]any)
-		if !ok {
-			return "", fmt.Errorf("cannot drill into non-object at %q", seg)
-		}
-		current, ok = m[seg]
-		if !ok {
-			return "", fmt.Errorf("key %q not found", seg)
+		if before, after, ok := strings.Cut(seg, "["); ok {
+			key := before
+			idxStr := strings.TrimSuffix(after, "]")
+			idx, err := strconv.Atoi(idxStr)
+			if err != nil {
+				return "", fmt.Errorf("invalid array index %q in %q", idxStr, seg)
+			}
+			if key != "" {
+				m, ok := current.(map[string]any)
+				if !ok {
+					return "", fmt.Errorf("expected object at %q, got %T", key, current)
+				}
+				current, ok = m[key]
+				if !ok {
+					return "", fmt.Errorf("key %q not found", key)
+				}
+			}
+			arr, ok := current.([]any)
+			if !ok {
+				return "", fmt.Errorf("expected array at %q, got %T", seg, current)
+			}
+			if idx < 0 || idx >= len(arr) {
+				return "", fmt.Errorf("array index %d out of range (len %d)", idx, len(arr))
+			}
+			current = arr[idx]
+		} else {
+			m, ok := current.(map[string]any)
+			if !ok {
+				return "", fmt.Errorf("cannot drill into non-object at %q", seg)
+			}
+			current, ok = m[seg]
+			if !ok {
+				return "", fmt.Errorf("key %q not found", seg)
+			}
 		}
 	}
+
 	switch v := current.(type) {
 	case string:
 		return v, nil
