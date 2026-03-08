@@ -20,6 +20,8 @@ type Config struct {
 	Environment   string
 	EncryptionKey string
 	JWTSecret     string
+	NatsURL       string
+	FrontendURL   string
 
 	GoogleOAuth    *OAuthProviderConfig
 	MicrosoftOAuth *OAuthProviderConfig
@@ -41,6 +43,14 @@ func LoadConfig() *Config {
 	if dbURL == "" {
 		dbURL = "postgres://user:password@localhost:5432/hermes"
 	}
+	natsURL := os.Getenv("NATS_URL")
+	if natsURL == "" {
+		natsURL = "nats://localhost:4222"
+	}
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:3001"
+	}
 	log.Printf("Loaded Config: Port=%s", port)
 	cfg := &Config{
 		Port:          port,
@@ -49,6 +59,8 @@ func LoadConfig() *Config {
 		Environment:   getEnv("ENV", "development"),
 		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
 		JWTSecret:     os.Getenv("JWT_SECRET"),
+		NatsURL:       natsURL,
+		FrontendURL:   frontendURL,
 	}
 	if id := os.Getenv("GOOGLE_CLIENT_ID"); id != "" {
 		cfg.GoogleOAuth = &OAuthProviderConfig{

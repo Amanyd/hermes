@@ -101,7 +101,7 @@ func (h *Handler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 		slog.String("account_email", tokens.Email),
 	)
 
-	h.respondSuccess(w, http.StatusOK, "Connection established", conn)
+	http.Redirect(w, r, h.frontendURL+"/dashboard/connections?connected=1", http.StatusTemporaryRedirect)
 }
 
 // Returns all OAuth connections for the authenticated user.

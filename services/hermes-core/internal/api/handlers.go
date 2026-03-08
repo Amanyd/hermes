@@ -65,6 +65,21 @@ func (h *Handler) CreateRelay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	switch req.TriggerType {
+	case "", models.TriggerWebhook, models.TriggerManual:
+	case models.TriggerCron:
+		schedule, ok := req.TriggerConfig["schedule"].(string)
+		if !ok || schedule == "" {
+			h.respondError(w, http.StatusBadRequest,
+				"trigger_config.schedule is required for cron triggers", "VALIDATION_ERROR")
+			return
+		}
+	default:
+		h.respondError(w, http.StatusBadRequest,
+			"unknown trigger_type: "+string(req.TriggerType), "VALIDATION_ERROR")
+		return
+	}
+
 	for i, action := range req.Actions {
 		if action.ActionType == "" {
 			h.respondError(w, http.StatusBadRequest,
@@ -329,6 +344,47 @@ func (h *Handler) DeleteRelay(w http.ResponseWriter, r *http.Request) {
 		map[string]string{
 			"deleted_id": relayID,
 		})
+}
+
+func (h *Handler) TriggerRelay(w http.ResponseWriter, r *http.Request) {
+	relayID := chi.URLParam(r, "id")
+	userID := GetUserID(r)
+
+	relay, err := h.store.GetRelay(r.Context(), relayID, userID)
+	if err != nil {
+		if errors.Is(err, store.ErrRelayNotFound) {
+			h.respondError(w, http.StatusNotFound, "Relay not found", "NOT_FOUND")
+			return
+		}
+		h.respondError(w, http.StatusInternalServerError, "Failed to fetch relay", "DB_ERROR")
+		return
+	}
+	if relay.TriggerType != models.TriggerManual {
+		h.respondError(w, http.StatusBadRequest,
+			"This relay does not support manual triggering", "WRONG_TRIGGER_TYPE")
+		return
+	}
+	if !relay.IsActive {
+		h.respondError(w, http.StatusBadRequest, "Relay is not active", "RELAY_INACTIVE")
+		return
+	}
+
+	var payload map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&payload)
+	if payload == nil {
+		payload = map[string]any{}
+	}
+
+	if err := h.publisher.PublishManualTrigger(r.Context(), relayID, payload); err != nil {
+		h.logger.Error("failed to publish manual trigger",
+			slog.String("relay_id", relayID),
+			slog.String("error", err.Error()))
+		h.respondError(w, http.StatusInternalServerError, "Failed to trigger relay", "PUBLISH_ERROR")
+		return
+	}
+
+	h.logger.Info("manual trigger fired", slog.String("relay_id", relayID), slog.String("user_id", userID))
+	h.respondSuccess(w, http.StatusAccepted, "Relay triggered", map[string]string{"relay_id": relayID})
 }
 
 // HEALTH CHECK

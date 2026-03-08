@@ -86,6 +86,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	pool.Start(ctx)
 
+	cronScheduler := engine.NewCronScheduler(db, pool.JobQueue, appLogger)
+	cronScheduler.Start(ctx)
+
 	consumer, err := queue.NewConsumer(cfg.NatsURL, pool.JobQueue, appLogger)
 	if err != nil {
 		appLogger.Error("NATS consumer creation failed", slog.String("error", err.Error()))
@@ -105,6 +108,7 @@ func main() {
 		appLogger.Error("error stopping consumer", slog.String("error", err.Error()))
 	}
 	cancel()
+	cronScheduler.Stop()
 	pool.Shutdown()
 	appLogger.Info("Worker stoppped gracefully")
 }

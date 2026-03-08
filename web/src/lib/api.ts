@@ -98,6 +98,20 @@ export async function deleteRelay(id: string): Promise<void> {
   await apiFetch(`/relays/${id}`, { method: "DELETE" });
 }
 
+export async function triggerRelay(
+  id: string,
+  payload: Record<string, unknown> = {},
+): Promise<{ relay_id: string }> {
+  const res = await apiFetch<APIResponse<{ relay_id: string }>>(
+    `/relays/${id}/trigger`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+  return res.data!;
+}
+
 export async function getExecutions(
   id: string,
   limit = 50,

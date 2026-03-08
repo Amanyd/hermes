@@ -9,6 +9,10 @@ import (
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/models"
 )
 
+type EventPublisher interface {
+	PublishManualTrigger(ctx context.Context, relayID string, payload map[string]any) error
+}
+
 type RelayStorer interface {
 	CreateRelay(ctx context.Context, req models.CreateRelayRequest) (*models.RelayWithActions, error)
 	GetAllRelays(ctx context.Context, userID string) ([]models.Relay, error)
@@ -47,6 +51,8 @@ type Handler struct {
 	logger          *slog.Logger
 	baseURL         string
 	jwtSecret       string
+	publisher       EventPublisher
+	frontendURL     string
 }
 
 func NewHandler(
@@ -58,6 +64,7 @@ func NewHandler(
 	stateCodec *oauth.StateCodec,
 	jwtSecret string,
 	logger *slog.Logger,
+	publisher EventPublisher,
 ) *Handler {
 	return &Handler{
 		store:           s,
@@ -68,6 +75,8 @@ func NewHandler(
 		stateCodec:      stateCodec,
 		jwtSecret:       jwtSecret,
 		logger:          logger,
+		publisher:       publisher,
 		baseURL:         "http://localhost:8080",
+		frontendURL:     "http://localhost:3001",
 	}
 }

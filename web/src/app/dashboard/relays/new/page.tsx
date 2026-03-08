@@ -9,6 +9,7 @@ import {
   ACTION_TYPES,
   type ActionType,
   type CreateRelayActionInput,
+  type TriggerType,
 } from "@/types/relay";
 
 const TEMPLATE_HINT =
@@ -160,9 +161,9 @@ function DiscordConfigFields({
   const switchMode = (mode: string) => {
     setWebhookMode(mode);
     if (mode === "direct") {
-      onChange("webhook_url_ref", "");
+      onChange("webhook_url_ref", undefined);
     } else {
-      onChange("webhook_url", "");
+      onChange("webhook_url", undefined);
     }
   };
 
@@ -233,9 +234,9 @@ function SlackConfigFields({
   const switchMode = (mode: string) => {
     setWebhookMode(mode);
     if (mode === "direct") {
-      onChange("webhook_url_ref", "");
+      onChange("webhook_url_ref", undefined);
     } else {
-      onChange("webhook_url", "");
+      onChange("webhook_url", undefined);
     }
   };
 
@@ -446,10 +447,11 @@ function ActionCard({
 }) {
   const setType = (type: ActionType) =>
     onUpdate(index, { ...action, action_type: type, config: {} });
-
-  const setConfig = (key: string, value: unknown) =>
-    onUpdate(index, { ...action, config: { ...action.config, [key]: value } });
-
+  const setConfig = (key: string, value: unknown) => {
+    const next = { ...action.config, [key]: value };
+    if (value === undefined) delete next[key];
+    onUpdate(index, { ...action, config: next });
+  };
   return (
     <div className="rounded-xl border border-white/10 bg-[#141414] p-4">
       <div className="flex items-center justify-between mb-3">
@@ -500,8 +502,11 @@ export default function NewRelayPage() {
   const createMutation = useCreateRelay();
   const nameId = useId();
   const descId = useId();
+  const scheduleId = useId();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [triggerType, setTriggerType] = useState<TriggerType>("webhook");
+  const [cronSchedule, setCronSchedule] = useState("0 9 * * *");
   const [actions, setActions] = useState<CreateRelayActionInput[]>([
     { action_type: "debug_log", config: {}, order_index: 0 },
   ]);
@@ -525,10 +530,16 @@ export default function NewRelayPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return toast.error("Name is required");
+    if (triggerType === "cron" && !cronSchedule.trim())
+      return toast.error("Cron schedule is required");
     try {
+      const triggerConfig =
+        triggerType === "cron" ? { schedule: cronSchedule.trim() } : {};
       const relay = await createMutation.mutateAsync({
         name,
         description,
+        trigger_type: triggerType,
+        trigger_config: triggerConfig,
         actions,
       });
       toast.success("Relay created!");
@@ -545,7 +556,7 @@ export default function NewRelayPage() {
       <div className="mb-8">
         <h1 className="text-xl font-bold text-white">New Relay</h1>
         <p className="mt-0.5 text-sm text-zinc-500">
-          Configure a webhook endpoint and its actions
+          Configure a trigger and its actions
         </p>
       </div>
 
@@ -565,7 +576,7 @@ export default function NewRelayPage() {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My webhook relay"
+              placeholder="My relay"
               className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-zinc-500 focus:border-orange-500/50 focus:outline-none focus:ring-1 focus:ring-orange-500/50"
             />
           </div>
@@ -585,6 +596,59 @@ export default function NewRelayPage() {
               className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-zinc-500 focus:border-orange-500/50 focus:outline-none focus:ring-1 focus:ring-orange-500/50"
             />
           </div>
+        </div>
+
+        {/* Trigger */}
+        <div className="rounded-xl border border-white/10 bg-[#1a1a1a] p-5 space-y-4">
+          <h2 className="text-sm font-medium text-zinc-300">Trigger</h2>
+          <SegmentedToggle
+            label="Trigger type"
+            value={triggerType}
+            onChange={(v) => setTriggerType(v as TriggerType)}
+            options={[
+              { label: "Webhook", value: "webhook" },
+              { label: "Manual", value: "manual" },
+              { label: "Cron", value: "cron" },
+            ]}
+          />
+          {triggerType === "webhook" && (
+            <p className="text-xs text-zinc-500">
+              A unique webhook URL will be generated. Send a POST request to it
+              to fire this relay.
+            </p>
+          )}
+          {triggerType === "manual" && (
+            <p className="text-xs text-zinc-500">
+              This relay can only be triggered manually from the dashboard or
+              via the API.
+            </p>
+          )}
+          {triggerType === "cron" && (
+            <div>
+              <label
+                htmlFor={scheduleId}
+                className="mb-1.5 block text-sm font-medium text-zinc-300"
+              >
+                Schedule <span className="text-orange-500">*</span>
+              </label>
+              <input
+                id={scheduleId}
+                type="text"
+                value={cronSchedule}
+                onChange={(e) => setCronSchedule(e.target.value)}
+                placeholder="0 9 * * *"
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 font-mono text-sm text-white placeholder:text-zinc-500 focus:border-orange-500/50 focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+              />
+              <p className="mt-1.5 text-xs text-zinc-500">
+                Standard 5-field cron:{" "}
+                <code className="text-zinc-400">
+                  minute hour day month weekday
+                </code>
+                . Example: <code className="text-zinc-400">0 9 * * *</code> =
+                every day at 9am.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Actions */}

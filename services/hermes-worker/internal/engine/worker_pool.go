@@ -153,8 +153,7 @@ func (wp *WorkerPool) process(ctx context.Context, job Job, logger *slog.Logger)
 		}
 
 		resolved = templateengine.Resolve(resolved, job.Payload, teSteps)
-
-		stepID, stepCreateErr := wp.Store.CreateExecutionStep(ctx, executionID, act.OrderIndex, act.ActionType, resolved)
+		stepID, stepCreateErr := wp.Store.CreateExecutionStep(ctx, executionID, act.OrderIndex, act.ActionType, redactConfig(act.Config, resolved))
 		if stepCreateErr != nil {
 			return fmt.Errorf("create step for action %s (order %d): %w",
 				act.ActionType, act.OrderIndex, stepCreateErr)
@@ -208,6 +207,9 @@ func (wp *WorkerPool) resolveSecrets(ctx context.Context, userID string, config 
 			if !ok {
 				return nil, fmt.Errorf("secret ref %q must be a string", k)
 			}
+			if strings.TrimSpace(secretName) == "" {
+				continue
+			}
 			actualKey := strings.TrimSuffix(k, "_ref")
 			value, err := wp.Store.ResolveSecret(ctx, userID, secretName)
 			if err != nil {
@@ -219,6 +221,35 @@ func (wp *WorkerPool) resolveSecrets(ctx context.Context, userID string, config 
 		}
 	}
 	return resolved, nil
+}
+
+func redactConfig(original, resolved map[string]any) map[string]any {
+	alwaysSensitive := map[string]struct{}{
+		"webhook_url": {},
+		"api_key":     {},
+		"token":       {},
+		"password":    {},
+		"secret":      {},
+	}
+
+	secretKeys := make(map[string]struct{})
+	for k := range original {
+		if before, ok := strings.CutSuffix(k, "_ref"); ok {
+			secretKeys[before] = struct{}{}
+		}
+	}
+
+	safe := make(map[string]any, len(resolved))
+	for k, v := range resolved {
+		_, isSecretRef := secretKeys[k]
+		_, isAlways := alwaysSensitive[k]
+		if isSecretRef || isAlways {
+			safe[k] = "[redacted]"
+		} else {
+			safe[k] = v
+		}
+	}
+	return safe
 }
 
 func (wp *WorkerPool) Shutdown() {

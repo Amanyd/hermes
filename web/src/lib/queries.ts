@@ -14,6 +14,7 @@ import {
   getSecrets,
   updateRelay,
   updateRelayActions,
+  triggerRelay,
 } from "@/lib/api";
 import type {
   CreateRelayActionInput,
@@ -146,6 +147,16 @@ export function useUpdateRelayActions(id: string) {
       updateRelayActions(id, actions),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.relay(id) });
+      qc.invalidateQueries({ queryKey: queryKeys.relayExecutions(id) });
+    },
+  });
+}
+
+export function useTriggerRelay(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) => triggerRelay(id, payload),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.relayExecutions(id) });
     },
   });

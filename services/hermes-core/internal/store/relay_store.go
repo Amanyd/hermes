@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/robfig/cron/v3"
 )
 
 type RelayStore struct {
@@ -29,36 +30,62 @@ func (s *RelayStore) CreateRelay(ctx context.Context, req models.CreateRelayRequ
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
+
 	relayID := uuid.New().String()
 	webhookPath := fmt.Sprintf("/hooks/%s", relayID)
-	now := time.Now()
-	queryRelay := `INSERT INTO relays (id, user_id, name,description,webhook_path,is_active, created_at, updated_at)
-	VALUES($1,$2,$3,$4,$5,$6,$7,$8)
-	RETURNING id, user_id, name, description, webhook_path, is_active, created_at, updated_at`
+	now := time.Now().UTC()
+
+	triggerType := req.TriggerType
+	if triggerType == "" {
+		triggerType = models.TriggerWebhook
+	}
+	triggerConfig := req.TriggerConfig
+	if triggerConfig == nil {
+		triggerConfig = map[string]any{}
+	}
+	triggerConfigJSON, err := json.Marshal(triggerConfig)
+	if err != nil {
+		return nil, fmt.Errorf("marshal trigger_config: %w", err)
+	}
+
+	var nextRunAt *time.Time
+	if triggerType == models.TriggerCron {
+		schedule, _ := triggerConfig["schedule"].(string)
+		next, err := computeNextRun(schedule, now)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cron schedule: %w", err)
+		}
+		nextRunAt = &next
+	}
+
+	queryRelay := `
+			INSERT INTO relays (id, user_id, name, description, webhook_path, is_active,
+			                    trigger_type, trigger_config, next_run_at, created_at, updated_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			RETURNING id, user_id, name, description, webhook_path, is_active,
+			          trigger_type, trigger_config, created_at, updated_at`
 
 	var relay models.Relay
+	var triggerConfigBytes []byte
+	var triggerTypeStr string
 
-	err = tx.QueryRow(ctx,
-		queryRelay,
-		relayID,
-		req.UserID,
-		req.Name,
-		req.Description,
-		webhookPath,
-		true,
-		now,
-		now).Scan(&relay.ID,
-		&relay.UserID,
-		&relay.Name,
-		&relay.Description,
-		&relay.WebhookPath,
-		&relay.IsActive,
-		&relay.CreatedAt,
-		&relay.UpdatedAt)
+	err = tx.QueryRow(ctx, queryRelay,
+		relayID, req.UserID, req.Name, req.Description, webhookPath, true,
+		string(triggerType), triggerConfigJSON, nextRunAt, now, now,
+	).Scan(
+		&relay.ID, &relay.UserID, &relay.Name, &relay.Description,
+		&relay.WebhookPath, &relay.IsActive,
+		&triggerTypeStr, &triggerConfigBytes,
+		&relay.CreatedAt, &relay.UpdatedAt,
+	)
+
 	if err != nil {
 		return nil, fmt.Errorf("insert relay: %w", err)
 	}
-
+	relay.TriggerType = models.TriggerType(triggerTypeStr)
+	if err := json.Unmarshal(triggerConfigBytes, &relay.TriggerConfig); err != nil {
+		return nil, fmt.Errorf("unmarshal trigger_config: %w", err)
+	}
 	actions := make([]models.RelayAction, 0, len(req.Actions))
 
 	queryAction := `INSERT INTO relay_actions(id,relay_id,action_type, config, order_index,created_at,updated_at)
@@ -448,4 +475,16 @@ func (s *RelayStore) GetExecutionSteps(ctx context.Context, executionID, userID 
 	}
 
 	return steps, nil
+}
+
+func computeNextRun(schedule string, from time.Time) (time.Time, error) {
+	if schedule == "" {
+		return time.Time{}, fmt.Errorf("cron schedule is empty")
+	}
+	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	sched, err := parser.Parse(schedule)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse cron %q: %w", schedule, err)
+	}
+	return sched.Next(from), nil
 }

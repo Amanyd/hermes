@@ -2,11 +2,21 @@ package models
 
 import "time"
 
+type TriggerType string
+
+const (
+	TriggerWebhook TriggerType = "webhook"
+	TriggerManual  TriggerType = "manual"
+	TriggerCron    TriggerType = "cron"
+)
+
 type CreateRelayRequest struct {
-	Name        string                   `json:"name"`
-	UserID      string                   `json:"user_id"`
-	Description string                   `json:"description"`
-	Actions     []CreateRelayActionInput `json:"actions"`
+	Name          string                   `json:"name"`
+	UserID        string                   `json:"user_id"`
+	Description   string                   `json:"description"`
+	TriggerType   TriggerType              `json:"trigger_type,omitempty"`
+	TriggerConfig map[string]any           `json:"trigger_config,omitempty"`
+	Actions       []CreateRelayActionInput `json:"actions"`
 }
 
 type CreateRelayActionInput struct {
@@ -51,15 +61,17 @@ type ExecutionStep struct {
 }
 
 type Relay struct {
-	ID          string    `json:"id"`
-	UserID      string    `json:"user_id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	WebhookPath string    `json:"webhook_path"`
-	WebhookURL  string    `json:"webhook_url"`
-	IsActive    bool      `json:"is_active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID            string         `json:"id"`
+	UserID        string         `json:"user_id"`
+	Name          string         `json:"name"`
+	Description   string         `json:"description"`
+	WebhookPath   string         `json:"webhook_path"`
+	WebhookURL    string         `json:"webhook_url"`
+	TriggerType   TriggerType    `json:"trigger_type"`
+	TriggerConfig map[string]any `json:"trigger_config,omitempty"`
+	IsActive      bool           `json:"is_active"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
 type RelayWithActions struct {

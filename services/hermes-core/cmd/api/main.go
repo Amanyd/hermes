@@ -16,6 +16,7 @@ import (
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/api"
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/config"
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/db"
+	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/queue"
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/store"
 	"github.com/joho/godotenv"
 )
@@ -77,7 +78,13 @@ func main() {
 	userStore := store.NewUserStore(pool)
 	connectionStore := store.NewConnectionStore(pool, enc)
 
-	handler := api.NewHandler(relayStore, secretStore, userStore, connectionStore, providers, stateCodec, cfg.JWTSecret, appLogger)
+	publisher, err := queue.NewNatsPublisher(cfg.NatsURL)
+	if err != nil {
+		appLogger.Error("failed to create NATS publisher", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	handler := api.NewHandler(relayStore, secretStore, userStore, connectionStore, providers, stateCodec, cfg.JWTSecret, appLogger, publisher)
 	router := api.NewRouter(handler, cfg.JWTSecret)
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

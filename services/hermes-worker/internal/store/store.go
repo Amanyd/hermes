@@ -13,6 +13,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type CronRelay struct {
+	ID            string
+	TriggerConfig map[string]any
+}
+
 type RelayAction struct {
 	OrderIndex int
 	ActionType string
@@ -270,4 +275,42 @@ func nullableString(s string) any {
 		return nil
 	}
 	return s
+}
+
+func (s *Store) GetCronRelaysDue(ctx context.Context) ([]CronRelay, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id, trigger_config
+		FROM relays
+		WHERE trigger_type = 'cron'
+		  AND is_active = true
+		  AND next_run_at IS NOT NULL
+		  AND next_run_at <= NOW()
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query cron relays: %w", err)
+	}
+	defer rows.Close()
+
+	var relays []CronRelay
+	for rows.Next() {
+		var r CronRelay
+		var configBytes []byte
+		if err := rows.Scan(&r.ID, &configBytes); err != nil {
+			return nil, fmt.Errorf("scan cron relay: %w", err)
+		}
+		if err := json.Unmarshal(configBytes, &r.TriggerConfig); err != nil {
+			return nil, fmt.Errorf("parse trigger_config: %w", err)
+		}
+		relays = append(relays, r)
+	}
+	return relays, rows.Err()
+}
+
+func (s *Store) UpdateRelayNextRun(ctx context.Context, relayID string, nextRunAt *time.Time) error {
+	_, err := s.db.Exec(ctx, `
+		UPDATE relays
+		SET last_run_at = NOW(), next_run_at = $2, updated_at = NOW()
+		WHERE id = $1
+	`, relayID, nextRunAt)
+	return err
 }

@@ -26,19 +26,20 @@ func writeError(w http.ResponseWriter, status int, message, code string) {
 func JWTAuth(jwtSecret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
+			var tokenString string
 			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				writeError(w, http.StatusUnauthorized, "Missing authorization header", "AUTH_REQUIRED")
-				return
+			if authHeader != "" {
+				parts := strings.SplitN(authHeader, " ", 2)
+				if len(parts) != 2 || parts[0] != "Bearer" {
+					writeError(w, http.StatusUnauthorized, "Invalid authorization format", "AUTH_INVALID")
+					return
+				}
+				tokenString = parts[1]
+			} else if t := r.URL.Query().Get("token"); t != "" {
+				tokenString = t
+			} else {
+				writeError(w, http.StatusUnauthorized, "Missing authorization token", "AUTH_REQUIRED")
 			}
-
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || parts[0] != "Bearer" {
-				writeError(w, http.StatusUnauthorized, "Invalid authorization format", "AUTH_INVALID")
-				return
-			}
-			tokenString := parts[1]
 
 			token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
 				return []byte(jwtSecret), nil

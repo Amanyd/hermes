@@ -3,10 +3,12 @@ module github.com/eulerbutcooler/hermes/services/hermes-worker
 go 1.25.6
 
 require (
-	github.com/eulerbutcooler/hermes/packages/hermes-common v0.0.0-20260121205147-6aed8b07d740
+	github.com/eulerbutcooler/hermes/packages/hermes-common v0.0.0-20260308135242-86627db99709
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/joho/godotenv v1.5.1
 	github.com/nats-io/nats.go v1.48.0
+	github.com/robfig/cron/v3 v3.0.1
 )
 
 require (

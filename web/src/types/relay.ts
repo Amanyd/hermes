@@ -5,6 +5,8 @@ export interface Relay {
   description: string;
   webhook_path: string;
   webhook_url: string;
+  trigger_type: TriggerType;
+  trigger_config: Record<string, unknown>;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -76,6 +78,8 @@ export interface CreateRelayRequest {
   name: string;
   description?: string;
   actions: CreateRelayActionInput[];
+  trigger_type?: TriggerType;
+  trigger_config?: Record<string, unknown>;
 }
 
 export interface UpdateRelayRequest {
@@ -119,4 +123,12 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   http_request: "HTTP Request",
   email_send: "Email",
   debug_log: "Debug Log",
+};
+
+export type TriggerType = "webhook" | "manual" | "cron";
+
+export const TRIGGER_LABELS: Record<TriggerType, string> = {
+  webhook: "Webhook",
+  manual: "Manual",
+  cron: "Cron",
 };
