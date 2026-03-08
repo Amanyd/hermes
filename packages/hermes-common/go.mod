@@ -1,3 +1,5 @@
 module github.com/eulerbutcooler/hermes/packages/hermes-common
 
 go 1.25.6
+
+require github.com/robfig/cron/v3 v3.0.1

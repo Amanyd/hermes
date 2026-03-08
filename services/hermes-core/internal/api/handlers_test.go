@@ -146,7 +146,7 @@ const testJWTsecret = "test-secret-key-for-jwt"
 // newTestHandler creates a Handler wired to the give mock stores
 func newTestHandler(rs *mockRelayStore, ss *mockSecretStore, us *mockUserStore) *Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewHandler(rs, ss, us, &mockConnectionStore{}, nil, nil, testJWTsecret, logger, nil)
+	return NewHandler(rs, ss, us, &mockConnectionStore{}, nil, nil, testJWTsecret, logger, nil, "", "")
 }
 
 // Creates a valid JWT for the given userID, simulating

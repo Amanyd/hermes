@@ -11,7 +11,6 @@ require (
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/joho/godotenv v1.5.1
 	github.com/nats-io/nats.go v1.49.0
-	github.com/robfig/cron/v3 v3.0.1
 	golang.org/x/crypto v0.48.0
 )
 

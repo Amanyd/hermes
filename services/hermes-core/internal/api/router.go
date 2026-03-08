@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func NewRouter(h *Handler, jwtSecret string) *chi.Mux {
+func NewRouter(h *Handler, jwtSecret string, frontendURL string) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -16,7 +16,7 @@ func NewRouter(h *Handler, jwtSecret string) *chi.Mux {
 	r.Use(middleware.RealIP)
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3001"}, // Will change to frontend url
+		AllowedOrigins:   []string{frontendURL}, // Will change to frontend url
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -27,9 +27,9 @@ func NewRouter(h *Handler, jwtSecret string) *chi.Mux {
 	r.Get("/health", h.HealthCheck)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Options("/*", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})
+		// r.Options("/*", func(w http.ResponseWriter, r *http.Request) {
+		// 	w.WriteHeader(http.StatusOK)
+		// })
 		// Public routes
 		r.Post("/auth/register", h.Register)
 		r.Options("/auth/register", func(w http.ResponseWriter, r *http.Request) {

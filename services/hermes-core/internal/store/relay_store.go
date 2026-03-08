@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/cronutil"
 	"github.com/eulerbutcooler/hermes/services/hermes-core/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/robfig/cron/v3"
 )
 
 type RelayStore struct {
@@ -52,7 +52,7 @@ func (s *RelayStore) CreateRelay(ctx context.Context, req models.CreateRelayRequ
 	var nextRunAt *time.Time
 	if triggerType == models.TriggerCron {
 		schedule, _ := triggerConfig["schedule"].(string)
-		next, err := computeNextRun(schedule, now)
+		next, err := cronutil.ComputeNextRun(schedule, now)
 		if err != nil {
 			return nil, fmt.Errorf("invalid cron schedule: %w", err)
 		}
@@ -290,7 +290,7 @@ func (s *RelayStore) UpdateRelay(ctx context.Context, relayID, userID string, re
 
 		if *req.TriggerType == models.TriggerCron {
 			schedule, _ := triggerConfig["schedule"].(string)
-			next, err := computeNextRun(schedule, now)
+			next, err := cronutil.ComputeNextRun(schedule, now)
 			if err != nil {
 				return nil, fmt.Errorf("invalid cron schedule: %w", err)
 			}
@@ -562,16 +562,4 @@ func (s *RelayStore) DeleteExecution(ctx context.Context, executionID, userID st
 		return ErrExecutionNotFound
 	}
 	return nil
-}
-
-func computeNextRun(schedule string, from time.Time) (time.Time, error) {
-	if schedule == "" {
-		return time.Time{}, fmt.Errorf("cron schedule is empty")
-	}
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
-	sched, err := parser.Parse(schedule)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("parse cron %q: %w", schedule, err)
-	}
-	return sched.Next(from), nil
 }

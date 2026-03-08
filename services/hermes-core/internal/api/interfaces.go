@@ -66,6 +66,8 @@ func NewHandler(
 	jwtSecret string,
 	logger *slog.Logger,
 	publisher EventPublisher,
+	baseURL string,
+	frontendURL string,
 ) *Handler {
 	return &Handler{
 		store:           s,
@@ -77,7 +79,7 @@ func NewHandler(
 		jwtSecret:       jwtSecret,
 		logger:          logger,
 		publisher:       publisher,
-		baseURL:         "http://localhost:8080",
-		frontendURL:     "http://localhost:3001",
+		baseURL:         baseURL,
+		frontendURL:     frontendURL,
 	}
 }

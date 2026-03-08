@@ -3,13 +3,12 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/eulerbutcooler/hermes/packages/hermes-common/pkg/cronutil"
 	"github.com/eulerbutcooler/hermes/services/hermes-worker/internal/store"
 	"github.com/google/uuid"
-	"github.com/robfig/cron/v3"
 )
 
 type CronStore interface {
@@ -93,7 +92,7 @@ func (cs *CronScheduler) tick(ctx context.Context) {
 		}
 
 		schedule, _ := relay.TriggerConfig["schedule"].(string)
-		nextRun, err := computeNextRun(schedule, time.Now())
+		nextRun, err := cronutil.ComputeNextRun(schedule, time.Now())
 		if err != nil {
 			cs.logger.Error("failed to compute next run",
 				slog.String("relay_id", relay.ID),
@@ -106,16 +105,4 @@ func (cs *CronScheduler) tick(ctx context.Context) {
 				slog.String("error", err.Error()))
 		}
 	}
-}
-
-func computeNextRun(schedule string, from time.Time) (time.Time, error) {
-	if schedule == "" {
-		return time.Time{}, fmt.Errorf("cron schedule is empty")
-	}
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
-	sched, err := parser.Parse(schedule)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("parse cron %q: %w", schedule, err)
-	}
-	return sched.Next(from), nil
 }
