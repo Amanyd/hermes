@@ -349,10 +349,10 @@ func (s *RelayStore) UpdateRelayActions(ctx context.Context, relayID, userID str
 
 	var relay models.Relay
 	err = tx.QueryRow(ctx,
-		`SELECT id, user_id, name, description, webhook_path, is_active, created_at, updated_at
+		`SELECT id, user_id, name, description, webhook_path, is_active, created_at, updated_at, trigger_type, trigger_config
 		 FROM relays WHERE id = $1 AND user_id = $2`, relayID, userID,
 	).Scan(&relay.ID, &relay.UserID, &relay.Name, &relay.Description,
-		&relay.WebhookPath, &relay.IsActive, &relay.CreatedAt, &relay.UpdatedAt)
+		&relay.WebhookPath, &relay.IsActive, &relay.CreatedAt, &relay.UpdatedAt, &relay.TriggerType, &relay.TriggerConfig)
 	if err == pgx.ErrNoRows {
 		return nil, ErrRelayNotFound
 	}

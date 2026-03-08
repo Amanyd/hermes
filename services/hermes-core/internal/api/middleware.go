@@ -39,6 +39,7 @@ func JWTAuth(jwtSecret string) func(http.Handler) http.Handler {
 				tokenString = t
 			} else {
 				writeError(w, http.StatusUnauthorized, "Missing authorization token", "AUTH_REQUIRED")
+				return
 			}
 
 			token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
