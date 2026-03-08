@@ -1,18 +1,18 @@
-'use client'
+"use client";
 
-import { useRouter } from 'next/navigation'
-import { useId, useState } from 'react'
-import { toast } from 'sonner'
-import { useConnections, useCreateRelay } from '@/lib/queries'
+import { useRouter } from "next/navigation";
+import { useId, useState, useEffect } from "react";
+import { toast } from "sonner";
+import { useConnections, useCreateRelay, useSecrets } from "@/lib/queries";
 import {
   ACTION_LABELS,
   ACTION_TYPES,
   type ActionType,
   type CreateRelayActionInput,
-} from '@/types/relay'
+} from "@/types/relay";
 
 const TEMPLATE_HINT =
-  'Supports {{ payload.x }}, {{ prev.output.x }}, {{ steps[0].output.x }}'
+  "Supports {{ payload.x }}, {{ prev.output.x }}, {{ steps[0].output.x }}";
 
 function ConfigField({
   cfgKey,
@@ -23,15 +23,15 @@ function ConfigField({
   onChange,
   showTemplateHint = true,
 }: {
-  cfgKey: string
-  label: string
-  placeholder: string
-  hint?: string
-  value: string
-  onChange: (key: string, value: unknown) => void
-  showTemplateHint?: boolean
+  cfgKey: string;
+  label: string;
+  placeholder: string;
+  hint?: string;
+  value: string;
+  onChange: (key: string, value: unknown) => void;
+  showTemplateHint?: boolean;
 }) {
-  const id = useId()
+  const id = useId();
   return (
     <div>
       <label
@@ -53,7 +53,235 @@ function ConfigField({
         <p className="mt-0.5 text-xs text-zinc-700">{TEMPLATE_HINT}</p>
       )}
     </div>
-  )
+  );
+}
+
+function SegmentedToggle({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { label: string; value: string }[];
+}) {
+  return (
+    <div>
+      <p className="mb-2 block text-xs font-medium text-zinc-400">{label}</p>
+      <div className="inline-flex rounded-lg border border-white/10 bg-[#111111] p-1">
+        {options.map((option) => {
+          const active = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                active
+                  ? "bg-orange-500 text-white"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ConfigSelectField({
+  cfgKey,
+  label,
+  hint,
+  value,
+  options,
+  placeholder = "Select an option",
+  onChange,
+}: {
+  cfgKey: string;
+  label: string;
+  hint?: string;
+  value: string;
+  options: { label: string; value: string }[];
+  placeholder?: string;
+  onChange: (key: string, value: unknown) => void;
+}) {
+  const id = useId();
+
+  return (
+    <div>
+      <label
+        htmlFor={id}
+        className="mb-1 block text-xs font-medium text-zinc-400"
+      >
+        {label}
+      </label>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(cfgKey, e.target.value)}
+        className="w-full rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 text-xs text-white focus:border-orange-500/50 focus:outline-none"
+      >
+        <option value="">{placeholder}</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {hint && <p className="mt-0.5 text-xs text-zinc-600">{hint}</p>}
+    </div>
+  );
+}
+
+function DiscordConfigFields({
+  config,
+  onChange,
+  secretOptions,
+}: {
+  config: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
+  secretOptions: { label: string; value: string }[];
+}) {
+  const [webhookMode, setWebhookMode] = useState(
+    (config.webhook_url_ref as string)?.trim() !== "" ? "secret" : "direct",
+  );
+
+  useEffect(() => {
+    setWebhookMode(
+      (config.webhook_url_ref as string)?.trim() !== "" ? "secret" : "direct",
+    );
+  }, [config.webhook_url_ref]);
+
+  const switchMode = (mode: string) => {
+    setWebhookMode(mode);
+    if (mode === "direct") {
+      onChange("webhook_url_ref", "");
+    } else {
+      onChange("webhook_url", "");
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <SegmentedToggle
+        label="Webhook Source"
+        value={webhookMode}
+        onChange={switchMode}
+        options={[
+          { label: "Direct URL", value: "direct" },
+          { label: "Saved Secret", value: "secret" },
+        ]}
+      />
+
+      {webhookMode === "direct" ? (
+        <ConfigField
+          cfgKey="webhook_url"
+          label="Webhook URL"
+          placeholder="https://discord.com/api/webhooks/..."
+          value={(config.webhook_url as string) ?? ""}
+          onChange={onChange}
+          showTemplateHint={false}
+        />
+      ) : (
+        <ConfigSelectField
+          cfgKey="webhook_url_ref"
+          label="Webhook URL Secret"
+          placeholder="Select a saved secret"
+          hint="Choose one of your saved secrets"
+          value={(config.webhook_url_ref as string) ?? ""}
+          options={secretOptions}
+          onChange={onChange}
+        />
+      )}
+
+      <ConfigField
+        cfgKey="message_template"
+        label="Message"
+        placeholder="Hello {{payload.user.name}}"
+        hint="Supports {{ payload.x }}, {{ prev.output.x }}, {{ steps[0].output.x }}"
+        value={(config.message_template as string) ?? ""}
+        onChange={onChange}
+      />
+    </div>
+  );
+}
+
+function SlackConfigFields({
+  config,
+  onChange,
+  secretOptions,
+}: {
+  config: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
+  secretOptions: { label: string; value: string }[];
+}) {
+  const [webhookMode, setWebhookMode] = useState(
+    (config.webhook_url_ref as string)?.trim() !== "" ? "secret" : "direct",
+  );
+
+  useEffect(() => {
+    setWebhookMode(
+      (config.webhook_url_ref as string)?.trim() !== "" ? "secret" : "direct",
+    );
+  }, [config.webhook_url_ref]);
+
+  const switchMode = (mode: string) => {
+    setWebhookMode(mode);
+    if (mode === "direct") {
+      onChange("webhook_url_ref", "");
+    } else {
+      onChange("webhook_url", "");
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <SegmentedToggle
+        label="Webhook Source"
+        value={webhookMode}
+        onChange={switchMode}
+        options={[
+          { label: "Direct URL", value: "direct" },
+          { label: "Saved Secret", value: "secret" },
+        ]}
+      />
+
+      {webhookMode === "direct" ? (
+        <ConfigField
+          cfgKey="webhook_url"
+          label="Webhook URL"
+          placeholder="https://hooks.slack.com/services/..."
+          value={(config.webhook_url as string) ?? ""}
+          onChange={onChange}
+          showTemplateHint={false}
+        />
+      ) : (
+        <ConfigSelectField
+          cfgKey="webhook_url_ref"
+          label="Webhook URL Secret"
+          placeholder="Select a saved secret"
+          hint="Choose one of your saved secrets"
+          value={(config.webhook_url_ref as string) ?? ""}
+          options={secretOptions}
+          onChange={onChange}
+        />
+      )}
+
+      <ConfigField
+        cfgKey="message_template"
+        label="Message"
+        placeholder="Hello {{payload.user.name}}"
+        hint="Supports {{ payload.x }}, {{ prev.output.x }}, {{ steps[0].output.x }}"
+        value={(config.message_template as string) ?? ""}
+        onChange={onChange}
+      />
+    </div>
+  );
 }
 
 function ActionConfigFields({
@@ -61,47 +289,46 @@ function ActionConfigFields({
   config,
   onChange,
 }: {
-  type: ActionType
-  config: Record<string, unknown>
-  onChange: (key: string, value: unknown) => void
+  type: ActionType;
+  config: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
 }) {
-  const methodId = useId()
-  const connectionId = useId()
-  const { data: connections } = useConnections()
+  const methodId = useId();
+  const connectionId = useId();
+  const { data: connections } = useConnections();
+  const { data: secrets } = useSecrets();
 
+  const secretOptions = (secrets ?? []).map((secret) => ({
+    label: secret.name,
+    value: secret.name,
+  }));
   switch (type) {
-    case 'discord_send':
-    case 'slack_send':
+    case "discord_send":
       return (
-        <div className="space-y-2">
-          <ConfigField
-            cfgKey="webhook_url"
-            label="Webhook URL"
-            placeholder="https://discord.com/api/webhooks/..."
-            value={(config.webhook_url as string) ?? ''}
-            onChange={onChange}
-            showTemplateHint={false}
-          />
-          <p className="text-xs text-zinc-600">Or use a secret ref:</p>
-          <ConfigField
-            cfgKey="webhook_url_ref"
-            label="Webhook URL Secret Ref"
-            placeholder="MY_DISCORD_WEBHOOK"
-            hint="Name of a saved secret"
-            value={(config.webhook_url_ref as string) ?? ''}
-            onChange={onChange}
-            showTemplateHint={false}
-          />
-        </div>
-      )
-    case 'http_request':
+        <DiscordConfigFields
+          config={config}
+          onChange={onChange}
+          secretOptions={secretOptions}
+        />
+      );
+
+    case "slack_send":
+      return (
+        <SlackConfigFields
+          config={config}
+          onChange={onChange}
+          secretOptions={secretOptions}
+        />
+      );
+
+    case "http_request":
       return (
         <div className="space-y-2">
           <ConfigField
             cfgKey="url"
             label="URL"
             placeholder="https://example.com/endpoint"
-            value={(config.url as string) ?? ''}
+            value={(config.url as string) ?? ""}
             onChange={onChange}
           />
           <div>
@@ -113,11 +340,11 @@ function ActionConfigFields({
             </label>
             <select
               id={methodId}
-              value={(config.method as string) ?? 'POST'}
-              onChange={(e) => onChange('method', e.target.value)}
+              value={(config.method as string) ?? "POST"}
+              onChange={(e) => onChange("method", e.target.value)}
               className="w-full rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 text-xs text-white focus:border-orange-500/50 focus:outline-none"
             >
-              {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => (
+              {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => (
                 <option key={m} value={m}>
                   {m}
                 </option>
@@ -128,12 +355,12 @@ function ActionConfigFields({
             cfgKey="body"
             label="Body (JSON)"
             placeholder='{"key": "value"}'
-            value={(config.body as string) ?? ''}
+            value={(config.body as string) ?? ""}
             onChange={onChange}
           />
         </div>
-      )
-    case 'email_send':
+      );
+    case "email_send":
       return (
         <div className="space-y-2">
           <div>
@@ -145,27 +372,27 @@ function ActionConfigFields({
             </label>
             <select
               id={connectionId}
-              value={(config.connection_id as string) ?? ''}
-              onChange={(e) => onChange('connection_id', e.target.value)}
+              value={(config.connection_id as string) ?? ""}
+              onChange={(e) => onChange("connection_id", e.target.value)}
               className="w-full rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 text-xs text-white focus:border-orange-500/50 focus:outline-none"
             >
               <option value="">Select a connected account…</option>
               {(connections ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.provider === 'google' ? 'Google' : 'Microsoft'}:{' '}
+                  {c.provider === "google" ? "Google" : "Microsoft"}:{" "}
                   {c.account_email}
                 </option>
               ))}
             </select>
             {(!connections || connections.length === 0) && (
               <p className="mt-0.5 text-xs text-amber-500/80">
-                No connections yet — add one in the{' '}
+                No connections yet — add one in the{" "}
                 <a
                   href="/dashboard/connections"
                   className="underline hover:text-amber-400"
                 >
                   Connections
-                </a>{' '}
+                </a>{" "}
                 page.
               </p>
             )}
@@ -174,33 +401,33 @@ function ActionConfigFields({
             cfgKey="to"
             label="To"
             placeholder="user@example.com or {{ payload.email }}"
-            value={(config.to as string) ?? ''}
+            value={(config.to as string) ?? ""}
             onChange={onChange}
           />
           <ConfigField
             cfgKey="subject"
             label="Subject"
             placeholder="Hello from Hermes"
-            value={(config.subject as string) ?? ''}
+            value={(config.subject as string) ?? ""}
             onChange={onChange}
           />
           <ConfigField
             cfgKey="body"
             label="Body"
             placeholder="Hi {{ payload.name }}, your event fired!"
-            value={(config.body as string) ?? ''}
+            value={(config.body as string) ?? ""}
             onChange={onChange}
           />
         </div>
-      )
-    case 'debug_log':
+      );
+    case "debug_log":
       return (
         <p className="text-xs text-zinc-500">
           Logs the raw payload — no config needed.
         </p>
-      )
+      );
     default:
-      return null
+      return null;
   }
 }
 
@@ -211,17 +438,17 @@ function ActionCard({
   onRemove,
   canRemove,
 }: {
-  index: number
-  action: CreateRelayActionInput
-  onUpdate: (index: number, updated: CreateRelayActionInput) => void
-  onRemove: (index: number) => void
-  canRemove: boolean
+  index: number;
+  action: CreateRelayActionInput;
+  onUpdate: (index: number, updated: CreateRelayActionInput) => void;
+  onRemove: (index: number) => void;
+  canRemove: boolean;
 }) {
   const setType = (type: ActionType) =>
-    onUpdate(index, { ...action, action_type: type, config: {} })
+    onUpdate(index, { ...action, action_type: type, config: {} });
 
   const setConfig = (key: string, value: unknown) =>
-    onUpdate(index, { ...action, config: { ...action.config, [key]: value } })
+    onUpdate(index, { ...action, config: { ...action.config, [key]: value } });
 
   return (
     <div className="rounded-xl border border-white/10 bg-[#141414] p-4">
@@ -265,51 +492,53 @@ function ActionCard({
         onChange={setConfig}
       />
     </div>
-  )
+  );
 }
 
 export default function NewRelayPage() {
-  const router = useRouter()
-  const createMutation = useCreateRelay()
-  const nameId = useId()
-  const descId = useId()
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
+  const router = useRouter();
+  const createMutation = useCreateRelay();
+  const nameId = useId();
+  const descId = useId();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [actions, setActions] = useState<CreateRelayActionInput[]>([
-    { action_type: 'debug_log', config: {}, order_index: 0 },
-  ])
+    { action_type: "debug_log", config: {}, order_index: 0 },
+  ]);
 
   const addAction = () =>
     setActions((prev) => [
       ...prev,
-      { action_type: 'debug_log', config: {}, order_index: prev.length },
-    ])
+      { action_type: "debug_log", config: {}, order_index: prev.length },
+    ]);
 
   const updateAction = (index: number, updated: CreateRelayActionInput) =>
-    setActions((prev) => prev.map((a, i) => (i === index ? updated : a)))
+    setActions((prev) => prev.map((a, i) => (i === index ? updated : a)));
 
   const removeAction = (index: number) =>
     setActions((prev) =>
       prev
         .filter((_, i) => i !== index)
         .map((a, i) => ({ ...a, order_index: i })),
-    )
+    );
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) return toast.error('Name is required')
+    e.preventDefault();
+    if (!name.trim()) return toast.error("Name is required");
     try {
       const relay = await createMutation.mutateAsync({
         name,
         description,
         actions,
-      })
-      toast.success('Relay created!')
-      router.push(`/dashboard/relays/${relay.id}`)
+      });
+      toast.success("Relay created!");
+      router.push(`/dashboard/relays/${relay.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create relay')
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create relay",
+      );
     }
-  }
+  };
 
   return (
     <div className="p-8 max-w-2xl">
@@ -404,7 +633,7 @@ export default function NewRelayPage() {
             disabled={createMutation.isPending}
             className="rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {createMutation.isPending ? 'Creating…' : 'Create relay'}
+            {createMutation.isPending ? "Creating…" : "Create relay"}
           </button>
           <button
             type="button"
@@ -416,5 +645,5 @@ export default function NewRelayPage() {
         </div>
       </form>
     </div>
-  )
+  );
 }

@@ -16,6 +16,12 @@ type Sender struct {
 	client *http.Client
 }
 
+type DiscordSendOutput struct {
+	Status     string `json:"status"`
+	StatusCode int    `json:"status_code"`
+	DurationMS int64  `json:"duration_ms,omitempty"`
+}
+
 func New() *Sender {
 	return &Sender{
 		client: &http.Client{Timeout: 5 * time.Second},
@@ -50,25 +56,39 @@ func (d *Sender) Execute(ctx context.Context, config map[string]any, payload []b
 		}
 		req.Header.Set("Content-Type", "application/json")
 
+		start := time.Now()
 		resp, doErr := d.client.Do(req)
+		duration := time.Since(start)
+
 		if doErr != nil {
 			lastErr = doErr
 			time.Sleep(time.Duration(200*(attempt+1)) * time.Millisecond)
 			continue
 		}
+
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			output, _ := json.Marshal(map[string]any{"status": "sent", "channel": url})
+			output, err := json.Marshal(DiscordSendOutput{
+				Status:     "sent",
+				StatusCode: resp.StatusCode,
+				DurationMS: duration.Milliseconds(),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("marshal discord output: %w", err)
+			}
 			return output, nil
 		}
+
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			lastErr = fmt.Errorf("discord returned %d", resp.StatusCode)
 			time.Sleep(time.Duration(200*(attempt+1)) * time.Millisecond)
 			continue
 		}
+
 		return nil, fmt.Errorf("discord returned non-retryable status %d", resp.StatusCode)
 	}
+
 	return nil, fmt.Errorf("discord send failed after retries: %w", lastErr)
 }
